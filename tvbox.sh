@@ -59,7 +59,6 @@ packages_tv() {
 
 smarttube_tv() {
   connect_tv
-  # SmartTube's current package is normally com.teamsmart.videomanager.tv.
   if has_pkg com.teamsmart.videomanager.tv; then
     echo "SmartTube zaten kurulu."
     return 0
@@ -89,16 +88,41 @@ ensure_home() {
   fi
 }
 
+performance_tv() {
+  connect_tv
+  echo "Hafif arayuz performans ayarlari uygulanıyor..."
+  adb -s "$TV" shell '
+    settings put global window_animation_scale 0.5 2>/dev/null || true
+    settings put global transition_animation_scale 0.5 2>/dev/null || true
+    settings put global animator_duration_scale 0.5 2>/dev/null || true
+  '
+}
+
 safe_debloat() {
   connect_tv
-  echo "Bilinen zararli/eski gereksiz kullanici paketleri kontrol ediliyor..."
-  for p in com.android.hservice com.android.server.cache com.google.system.processes.gp com.android.negro com.apple.atve.androidtv.appletv org.mozilla.tv.firefox com.vstrong.iptv com.next.iptv; do
+  echo "Bilinen zararli ve gereksiz kullanici paketleri kontrol ediliyor..."
+  for p in \
+    com.android.hservice \
+    com.android.server.cache \
+    com.google.system.processes.gp \
+    com.android.negro \
+    com.apple.atve.androidtv.appletv \
+    org.mozilla.tv.firefox \
+    com.vstrong.iptv \
+    com.next.iptv \
+    x.cpe \
+    com.yokatv.market \
+    com.droidlogic.vsota \
+    com.videosstrong.factorytest \
+    com.vs.newlauncher \
+    com.vstrong.resetcheck
+  do
     if has_pkg "$p"; then
       adb -s "$TV" shell "pm uninstall --user 0 $p" >/dev/null 2>&1 || true
       echo "Kaldirildi/etkisiz: $p"
     fi
   done
-  # Google stack, mouse cursor, Projectivy and Coji are intentionally preserved.
+  # Google stack, mouse cursor, Projectivy and Coji intentionally preserved.
 }
 
 ensure_agent() {
@@ -112,11 +136,12 @@ ensure_agent() {
 }
 
 bootstrap_once() {
-  FLAG="$STATE_DIR/bootstrap-v1.done"
+  FLAG="$STATE_DIR/bootstrap-v2.done"
   [ -f "$FLAG" ] && return 0
-  echo "=== ILK OTOMATIK KURULUM ==="
+  echo "=== OTOMATIK TV BOX KURULUMU v2 ==="
   safe_debloat
   ensure_home
+  performance_tv
   if smarttube_tv; then
     echo "SmartTube kurulumu tamamlandi/kontrol edildi."
   else
@@ -147,5 +172,6 @@ case "${1:-help}" in
   packages) packages_tv ;;
   smarttube) smarttube_tv ;;
   bootstrap) bootstrap_once ;;
-  *) echo "Kullanim: tvupdate | tvbox status | clean | packages | smarttube | bootstrap" ;;
+  performance) performance_tv ;;
+  *) echo "Kullanim: tvupdate | tvbox status | clean | packages | smarttube | bootstrap | performance" ;;
 esac
