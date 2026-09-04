@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updated": "2026-09-04",
+  "apps": [
+    {
+      "name": "ÖZDEMİR TV OS",
+      "package": "com.ozdemir.tvlauncher",
+      "versionName": "1.0.0",
+      "versionCode": 1,
+      "category": "Sistem",
+      "apkUrl": "https://raw.githubusercontent.com/asansoravcilari-pixel/TV-BOX/main/dist/OZDEMIR-TV-OS-Launcher.apk",
+      "sha256": ""
+    }
+  ]
+}
