@@ -4,7 +4,8 @@ set -u
 TV="${TVBOX_ADB:-192.168.2.85:5555}"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_DIR="$HOME/.cache/tvbox-control"
-mkdir -p "$TMP_DIR"
+STATE_DIR="$HOME/.tvbox-agent"
+mkdir -p "$TMP_DIR" "$STATE_DIR"
 
 connect_tv() {
   adb start-server >/dev/null 2>&1 || true
@@ -15,6 +16,8 @@ connect_tv() {
     exit 1
   fi
 }
+
+has_pkg() { adb -s "$TV" shell "pm path $1" 2>/dev/null | grep -q '^package:'; }
 
 status_tv() {
   connect_tv
@@ -35,15 +38,8 @@ clean_tv() {
   sleep 1
   adb -s "$TV" shell '
     pm trim-caches 8G 2>/dev/null || true
-    rm -rf /data/local/tmp/* 2>/dev/null
-    rm -rf /cache/* 2>/dev/null
-    rm -rf /data/cache/* 2>/dev/null
-    rm -rf /data/tombstones/* 2>/dev/null
-    rm -rf /data/anr/* 2>/dev/null
-    rm -rf /data/system/dropbox/* 2>/dev/null
-    rm -rf /data/media/awlog/* 2>/dev/null
-    rm -rf /data/data/com.android.providers.downloads/cache/* 2>/dev/null
-    rm -rf /data/data/com.android.providers.downloads/code_cache/* 2>/dev/null
+    rm -rf /data/local/tmp/* /cache/* /data/cache/* /data/tombstones/* /data/anr/* /data/system/dropbox/* /data/media/awlog/* 2>/dev/null
+    rm -rf /data/data/com.android.providers.downloads/cache/* /data/data/com.android.providers.downloads/code_cache/* 2>/dev/null
     find /data/data -type d -name cache -exec sh -c '\''rm -rf "$1"/*'\'' _ {} \; 2>/dev/null
     find /data/data -type d -name code_cache -exec sh -c '\''rm -rf "$1"/*'\'' _ {} \; 2>/dev/null
     df -h /data
@@ -56,25 +52,18 @@ packages_tv() {
   adb -s "$TV" shell 'pm list packages -3'
   echo
   echo "=== KORUNAN TEMEL PAKETLER ==="
-  for p in \
-    com.spocky.projengmenu \
-    mvl.studio.tvlite \
-    com.tv.mscursor \
-    com.google.android.youtube.tv \
-    com.google.android.gms \
-    com.google.android.gsf \
-    com.android.vending
-  do
-    if adb -s "$TV" shell "pm path $p" 2>/dev/null | grep -q '^package:'; then
-      echo "OK   $p"
-    else
-      echo "YOK  $p"
-    fi
+  for p in com.spocky.projengmenu mvl.studio.tvlite com.tv.mscursor com.google.android.youtube.tv com.google.android.gms com.google.android.gsf com.android.vending; do
+    if has_pkg "$p"; then echo "OK   $p"; else echo "YOK  $p"; fi
   done
 }
 
 smarttube_tv() {
   connect_tv
+  # SmartTube's current package is normally com.teamsmart.videomanager.tv.
+  if has_pkg com.teamsmart.videomanager.tv; then
+    echo "SmartTube zaten kurulu."
+    return 0
+  fi
   APK="$TMP_DIR/smarttube_stable.apk"
   URL="https://github.com/yuliskov/SmartTube/releases/download/latest/smarttube_stable.apk"
   echo "SmartTube resmi stable APK indiriliyor..."
@@ -84,15 +73,36 @@ smarttube_tv() {
   elif command -v wget >/dev/null 2>&1; then
     wget -O "$APK" "$URL"
   else
-    echo "curl veya wget gerekli. Termux: pkg install curl"
-    exit 1
+    echo "curl/wget yok; SmartTube bu turda atlandi."
+    return 1
   fi
+  [ -s "$APK" ] || { echo "SmartTube APK indirilemedi."; return 1; }
   echo "APK boyutu: $(du -h "$APK" | awk '{print $1}')"
   adb -s "$TV" install -r "$APK"
 }
 
+ensure_home() {
+  connect_tv
+  if has_pkg com.spocky.projengmenu; then
+    adb -s "$TV" shell 'cmd package set-home-activity com.spocky.projengmenu/.ui.home.MainActivity >/dev/null 2>&1 || true'
+    echo "Projectivy HOME kontrol edildi."
+  fi
+}
+
+safe_debloat() {
+  connect_tv
+  echo "Bilinen zararli/eski gereksiz kullanici paketleri kontrol ediliyor..."
+  for p in com.android.hservice com.android.server.cache com.google.system.processes.gp com.android.negro com.apple.atve.androidtv.appletv org.mozilla.tv.firefox com.vstrong.iptv com.next.iptv; do
+    if has_pkg "$p"; then
+      adb -s "$TV" shell "pm uninstall --user 0 $p" >/dev/null 2>&1 || true
+      echo "Kaldirildi/etkisiz: $p"
+    fi
+  done
+  # Google stack, mouse cursor, Projectivy and Coji are intentionally preserved.
+}
+
 ensure_agent() {
-  AGENT_LOOP="$HOME/.tvbox-agent/loop.sh"
+  AGENT_LOOP="$STATE_DIR/loop.sh"
   if [ ! -f "$AGENT_LOOP" ] || ! grep -q 'sleep 60' "$AGENT_LOOP" 2>/dev/null; then
     if [ -f "$ROOT_DIR/agent-install.sh" ]; then
       echo "1 dakikalik otomatik guncelleme agenti kuruluyor..."
@@ -101,12 +111,26 @@ ensure_agent() {
   fi
 }
 
-update_all() {
-  if [ -d "$ROOT_DIR/.git" ]; then
-    git -C "$ROOT_DIR" pull --ff-only || true
+bootstrap_once() {
+  FLAG="$STATE_DIR/bootstrap-v1.done"
+  [ -f "$FLAG" ] && return 0
+  echo "=== ILK OTOMATIK KURULUM ==="
+  safe_debloat
+  ensure_home
+  if smarttube_tv; then
+    echo "SmartTube kurulumu tamamlandi/kontrol edildi."
+  else
+    echo "SmartTube kurulumu daha sonra tekrar denenecek."
+    return 0
   fi
+  date > "$FLAG"
+}
+
+update_all() {
+  if [ -d "$ROOT_DIR/.git" ]; then git -C "$ROOT_DIR" pull --ff-only || true; fi
   ensure_agent
   connect_tv
+  bootstrap_once
   clean_tv
   echo
   packages_tv
@@ -122,12 +146,6 @@ case "${1:-help}" in
   clean) clean_tv ;;
   packages) packages_tv ;;
   smarttube) smarttube_tv ;;
-  *)
-    echo "Kullanim:"
-    echo "  tvupdate"
-    echo "  tvbox status"
-    echo "  tvbox clean"
-    echo "  tvbox packages"
-    echo "  tvbox smarttube"
-    ;;
+  bootstrap) bootstrap_once ;;
+  *) echo "Kullanim: tvupdate | tvbox status | clean | packages | smarttube | bootstrap" ;;
 esac
