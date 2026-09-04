@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application android:allowBackup="false" android:label="ÖZDEMİR TV OS" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="landscape" android:launchMode="singleTask">
@@ -19,8 +20,20 @@
         </activity>
         <activity android:name=".LiveTvActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".AppsActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".ArchiveActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FilesActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".SettingsPanelActivity" android:exported="false" android:screenOrientation="landscape" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <service android:name=".OzdemirKeyboardService" android:label="ÖZDEMİR TV Klavyesi" android:permission="android.permission.BIND_INPUT_METHOD" android:exported="true">
             <intent-filter><action android:name="android.view.InputMethod" /></intent-filter>
             <meta-data android:name="android.view.im" android:resource="@xml/method" />
