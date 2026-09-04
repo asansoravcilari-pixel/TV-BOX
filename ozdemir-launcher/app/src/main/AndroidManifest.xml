@@ -20,6 +20,7 @@
         </activity>
         <activity android:name=".LiveTvActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".DiziFilmActivity" android:exported="false" android:screenOrientation="landscape" />
+        <activity android:name=".KidsActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".AppsActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".ArchiveActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FilesActivity" android:exported="false" android:screenOrientation="landscape" />
