@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "updated": "2026-09-04",
   "apps": [
     {
@@ -37,10 +37,33 @@
       "sourceUrl": "https://www.plex.tv/media-server-downloads/"
     },
     {
+      "name": "Nova Video Player",
+      "package": "org.courville.nova",
+      "category": "Medya",
+      "sourceUrl": "https://github.com/nova-video-player/aos-AVP/releases"
+    },
+    {
       "name": "SmartTube",
       "package": "com.liskovsoft.smarttubetv.beta",
       "category": "Video",
       "sourceUrl": "https://github.com/yuliskov/SmartTube/releases"
+    },
+    {
+      "name": "TV Bro",
+      "category": "Tarayıcı",
+      "sourceUrl": "https://github.com/truefedex/tv-bro/releases"
+    },
+    {
+      "name": "LocalSend",
+      "package": "org.localsend.localsend_app",
+      "category": "Dosya & Ağ",
+      "sourceUrl": "https://github.com/localsend/localsend/releases"
+    },
+    {
+      "name": "Moonlight",
+      "package": "com.limelight",
+      "category": "Oyun & Yayın",
+      "sourceUrl": "https://github.com/moonlight-stream/moonlight-android/releases"
     },
     {
       "name": "F-Droid",
