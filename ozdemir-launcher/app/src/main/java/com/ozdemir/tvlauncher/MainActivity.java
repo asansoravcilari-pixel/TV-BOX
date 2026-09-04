@@ -3,6 +3,7 @@ package com.ozdemir.tvlauncher;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -27,7 +28,18 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     private final Handler clockHandler = new Handler();
     private TextView clockView;
+    private TextView dateView;
     private TextView networkView;
+    private LinearLayout root;
+    private SharedPreferences prefs;
+    private int themeIndex;
+
+    private final int[][] themes = new int[][]{
+            {0xFF120818, 0xFF2B0F3D, 0xFF090711},
+            {0xFF070A1D, 0xFF26134A, 0xFF080913},
+            {0xFF090A18, 0xFF30124B, 0xFF10051D},
+            {0xFF17071F, 0xFF451760, 0xFF0B0712}
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,19 +47,19 @@ public class MainActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        prefs = getSharedPreferences("ozdemir_tv", MODE_PRIVATE);
+        themeIndex = prefs.getInt("theme", 0);
         hideSystemUi();
         setContentView(buildHome());
         startClock();
     }
 
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) hideSystemUi();
     }
 
-    @Override
-    protected void onResume() {
+    @Override protected void onResume() {
         super.onResume();
         updateNetwork();
     }
@@ -63,40 +75,64 @@ public class MainActivity extends Activity {
     }
 
     private View buildHome() {
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(42), dp(30), dp(42), dp(28));
-        root.setBackgroundColor(Color.rgb(10, 13, 18));
+        root.setPadding(dp(44), dp(26), dp(44), dp(22));
+        applyTheme();
 
         LinearLayout header = row();
-        TextView brand = text("ÖZDEMİR TV", 25, true);
-        header.addView(brand, new LinearLayout.LayoutParams(0, dp(52), 1f));
+        LinearLayout brandBlock = new LinearLayout(this);
+        brandBlock.setOrientation(LinearLayout.VERTICAL);
+        TextView brand = text("ÖZDEMİR TV", 27, true);
+        brand.setTextColor(Color.WHITE);
+        TextView slogan = text("HAYAT DAİMA DAHA FAZLASI İÇİN...", 11, false);
+        slogan.setTextColor(0xFFCC9DEB);
+        brandBlock.addView(brand);
+        brandBlock.addView(slogan);
+        header.addView(brandBlock, new LinearLayout.LayoutParams(0, dp(58), 1f));
 
-        networkView = text("Ağ kontrol ediliyor", 16, false);
+        networkView = text("Ağ kontrol ediliyor", 15, false);
         networkView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
-        header.addView(networkView, new LinearLayout.LayoutParams(dp(300), dp(52)));
+        header.addView(networkView, new LinearLayout.LayoutParams(dp(230), dp(58)));
 
-        clockView = text("--:--", 27, true);
-        clockView.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
-        header.addView(clockView, new LinearLayout.LayoutParams(dp(150), dp(52)));
+        LinearLayout timeBlock = new LinearLayout(this);
+        timeBlock.setOrientation(LinearLayout.VERTICAL);
+        timeBlock.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        clockView = text("--:--", 28, true);
+        clockView.setGravity(Gravity.RIGHT);
+        dateView = text("", 12, false);
+        dateView.setTextColor(0xFFBFA9CF);
+        dateView.setGravity(Gravity.RIGHT);
+        timeBlock.addView(clockView);
+        timeBlock.addView(dateView);
+        header.addView(timeBlock, new LinearLayout.LayoutParams(dp(150), dp(58)));
         root.addView(header);
 
         root.addView(section("Ana"));
         LinearLayout main = row();
-        main.addView(card("Canlı TV", "TV kaynağı seçilecek", () -> missing("Canlı TV uygulaması henüz seçilmedi."), true), weightCard());
-        main.addView(card("SmartTube", "YouTube", () -> launchPackage("com.teamsmart.videomanager.tv"), true), weightCard());
-        main.addView(card("Coji", "Web tarayıcı", () -> launchPackage("mvl.studio.tvlite"), true), weightCard());
+        main.addView(card("Canlı TV", "TV uygulaması", () -> launchFirst(
+                new String[]{"nl.studio.tvLite", "com.tv.browser"},
+                "Canlı TV uygulaması bulunamadı."), true), weightCard());
+        main.addView(card("SmartTube", "YouTube", () -> launchFirst(
+                new String[]{"org.smarttuber.stable", "com.teamsmart.videomanager.tv"},
+                "SmartTube kurulu değil."), true), weightCard());
+        main.addView(card("coji", "Tarayıcı / içerik", () -> launchFirst(
+                new String[]{"com.tv.browser", "nl.studio.tvLite"},
+                "coji uygulaması bulunamadı."), true), weightCard());
         main.addView(card("Medya", "USB / dosyalar", this::openFiles, true), weightCard());
         root.addView(main, new LinearLayout.LayoutParams(-1, 0, 1.7f));
 
         root.addView(section("Çocuklar"));
         LinearLayout kids = row();
-        kids.addView(card("YouTube Kids", "Çocuk uygulaması varsa aç", () -> launchFirst(
-                new String[]{"com.google.android.apps.youtube.kids", "com.google.android.youtube.tvkids"},
-                "YouTube Kids bu cihazda kurulu değil."), false), weightCard());
-        kids.addView(card("Çocuk Medya", "Yerel içerik", this::openFiles, false), weightCard());
-        kids.addView(card("Eğitim", "Uygulama seçilecek", () -> missing("Eğitim uygulaması henüz seçilmedi."), false), weightCard());
-        kids.addView(card("Favoriler", "Çocuk kısayolları", () -> missing("Çocuk favorileri sonraki aşamada yapılandırılacak."), false), weightCard());
+        kids.addView(card("YouTube Kids", "", () -> launchFirst(new String[]{
+                "com.google.android.apps.youtube.kids", "com.google.android.youtube.tvkids"},
+                "YouTube Kids kurulu değil."), false), weightCard());
+        kids.addView(card("TRT Çocuk", "", () -> launchFirst(new String[]{
+                "com.trtcocuk.mobile", "com.trtcocuk"}, "TRT Çocuk kurulu değil."), false), weightCard());
+        kids.addView(card("Maşa", "", () -> missing("Maşa uygulaması için paket adı eklenecek."), false), weightCard());
+        kids.addView(card("Pepee", "", () -> missing("Pepee uygulaması için paket adı eklenecek."), false), weightCard());
+        kids.addView(card("Oyunlar", "", () -> openSettings(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS), false), weightCard());
+        kids.addView(card("Tümünü Gör", "", () -> openSettings(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS), false), weightCard());
         root.addView(kids, new LinearLayout.LayoutParams(-1, 0, 1.15f));
 
         root.addView(section("Sistem"));
@@ -105,12 +141,34 @@ public class MainActivity extends Activity {
         bottom.addView(card("Dosyalar", "", this::openFiles, false), weightCard());
         bottom.addView(card("Ağ", "", () -> openSettings(Settings.ACTION_WIFI_SETTINGS), false), weightCard());
         bottom.addView(card("Depolama", "", () -> openSettings(Settings.ACTION_INTERNAL_STORAGE_SETTINGS), false), weightCard());
-        bottom.addView(card("Zamanlayıcı", "", () -> missing("Uyku zamanlayıcısı yardımcı bileşeni Phase 4'te eklenecek."), false), weightCard());
+        bottom.addView(card("Zamanlayıcı", "", () -> missing("Uyku zamanlayıcısı sonraki sürümde bağlanacak."), false), weightCard());
+        bottom.addView(card("Tema", "", this::nextTheme, false), weightCard());
         bottom.addView(card("Ayarlar", "", () -> openSettings(Settings.ACTION_SETTINGS), false), weightCard());
-        bottom.addView(card("Güç", "", () -> missing("Güç menüsü yardımcı bileşeni Phase 4'te eklenecek."), false), weightCard());
+        bottom.addView(card("Güç", "", () -> missing("Güç işlemleri sistem yetkisi gerektiriyor."), false), weightCard());
         root.addView(bottom, new LinearLayout.LayoutParams(-1, 0, 0.95f));
 
+        TextView footer = text("ÖZDEMİR TV OS  •  Android 10  •  2 GB RAM  •  Allwinner H616", 10, false);
+        footer.setTextColor(0xFF9B8BA8);
+        footer.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        root.addView(footer, new LinearLayout.LayoutParams(-1, dp(24)));
+
+        View first = main.getChildAt(0);
+        if (first != null) first.requestFocus();
         return root;
+    }
+
+    private void nextTheme() {
+        themeIndex = (themeIndex + 1) % themes.length;
+        prefs.edit().putInt("theme", themeIndex).apply();
+        applyTheme();
+        Toast.makeText(this, "Tema " + (themeIndex + 1) + "/4", Toast.LENGTH_SHORT).show();
+    }
+
+    private void applyTheme() {
+        if (root == null) return;
+        int[] c = themes[themeIndex];
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, c);
+        root.setBackground(bg);
     }
 
     private LinearLayout row() {
@@ -127,10 +185,10 @@ public class MainActivity extends Activity {
     }
 
     private TextView section(String label) {
-        TextView t = text(label, 17, true);
-        t.setTextColor(Color.rgb(166, 177, 194));
+        TextView t = text(label, 16, true);
+        t.setTextColor(0xFFC9A7DD);
         t.setGravity(Gravity.BOTTOM | Gravity.LEFT);
-        t.setPadding(dp(6), dp(7), 0, dp(3));
+        t.setPadding(dp(6), dp(6), 0, dp(2));
         return t;
     }
 
@@ -138,25 +196,26 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER_VERTICAL);
-        box.setPadding(dp(20), dp(14), dp(16), dp(14));
+        box.setPadding(dp(18), dp(13), dp(15), dp(13));
         box.setFocusable(true);
+        box.setFocusableInTouchMode(true);
         box.setClickable(true);
         box.setBackground(cardBackground(false));
 
-        TextView titleView = text(title, large ? 23 : 18, true);
+        TextView titleView = text(title, large ? 22 : 16, true);
         box.addView(titleView);
         if (subtitle != null && !subtitle.isEmpty()) {
-            TextView sub = text(subtitle, large ? 14 : 12, false);
-            sub.setTextColor(Color.rgb(156, 166, 182));
+            TextView sub = text(subtitle, large ? 13 : 11, false);
+            sub.setTextColor(0xFFB9A9C5);
             sub.setPadding(0, dp(5), 0, 0);
             box.addView(sub);
         }
 
         box.setOnClickListener(v -> action.run());
         box.setOnFocusChangeListener((v, focused) -> {
+            v.animate().scaleX(focused ? 1.045f : 1f).scaleY(focused ? 1.045f : 1f).setDuration(120).start();
             v.setBackground(cardBackground(focused));
-            v.setScaleX(focused ? 1.035f : 1f);
-            v.setScaleY(focused ? 1.035f : 1f);
+            v.setElevation(focused ? dp(12) : dp(2));
         });
         return box;
     }
@@ -164,29 +223,19 @@ public class MainActivity extends Activity {
     private GradientDrawable cardBackground(boolean focused) {
         GradientDrawable d = new GradientDrawable();
         d.setCornerRadius(dp(18));
-        d.setColor(focused ? Color.rgb(42, 55, 74) : Color.rgb(25, 31, 41));
-        d.setStroke(dp(focused ? 2 : 1), focused ? Color.rgb(215, 225, 240) : Color.rgb(53, 63, 78));
+        d.setColor(focused ? 0xE83A1854 : 0xB01A1022);
+        d.setStroke(dp(focused ? 2 : 1), focused ? 0xFFE6B5FF : 0x556F4B82);
         return d;
     }
 
     private TextView text(String s, int sp, boolean bold) {
         TextView t = new TextView(this);
         t.setText(s);
-        t.setTextColor(Color.rgb(239, 243, 248));
+        t.setTextColor(0xFFF8F3FA);
         t.setTextSize(sp);
         if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         t.setGravity(Gravity.CENTER_VERTICAL);
         return t;
-    }
-
-    private void launchPackage(String pkg) {
-        Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (i == null) {
-            missing(pkg + " kurulu değil.");
-            return;
-        }
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(i);
     }
 
     private void launchFirst(String[] packages, String message) {
@@ -227,9 +276,9 @@ public class MainActivity extends Activity {
     private void startClock() {
         clockHandler.post(new Runnable() {
             @Override public void run() {
-                if (clockView != null) {
-                    clockView.setText(new SimpleDateFormat("HH:mm", new Locale("tr", "TR")).format(new Date()));
-                }
+                Date now = new Date();
+                if (clockView != null) clockView.setText(new SimpleDateFormat("HH:mm", new Locale("tr", "TR")).format(now));
+                if (dateView != null) dateView.setText(new SimpleDateFormat("d MMM EEE", new Locale("tr", "TR")).format(now));
                 updateNetwork();
                 clockHandler.postDelayed(this, 15000);
             }
@@ -245,7 +294,8 @@ public class MainActivity extends Activity {
             NetworkCapabilities caps = n == null ? null : cm.getNetworkCapabilities(n);
             online = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
         } catch (Exception ignored) { }
-        networkView.setText(online ? "● İnternet bağlı" : "○ Çevrimdışı");
+        networkView.setText(online ? "● Wi‑Fi / İnternet bağlı" : "○ Çevrimdışı");
+        networkView.setTextColor(online ? 0xFFD9B2EF : 0xFFB0A5B8);
     }
 
     private int dp(int value) {
