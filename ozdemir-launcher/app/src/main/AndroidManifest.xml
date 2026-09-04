@@ -24,6 +24,7 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".LiveTvActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".AppsActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".FilesActivity" android:exported="false" android:screenOrientation="landscape" />
         <activity android:name=".SettingsPanelActivity" android:exported="false" android:screenOrientation="landscape" />
