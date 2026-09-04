@@ -18,9 +18,7 @@ git fetch origin main --quiet 2>>"$LOG" || exit 0
 NEW=$(git rev-parse origin/main 2>/dev/null || true)
 [ -n "$NEW" ] || exit 0
 [ "$OLD" = "$NEW" ] && exit 0
-# Only fast-forward the dedicated TV-BOX repository.
 git reset --hard origin/main >>"$LOG" 2>&1 || exit 0
-# Routine update intentionally excludes ADB lockdown/partition/firmware operations.
 bash "$REPO/tvbox.sh" update >>"$LOG" 2>&1 || true
 echo "$(date '+%F %T') applied $NEW" >>"$LOG"
 EOF
@@ -30,12 +28,11 @@ cat > "$AGENT/loop.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 while true; do
   "$HOME/.tvbox-agent/check.sh" || true
-  sleep 180
+  sleep 60
 done
 EOF
 chmod +x "$AGENT/loop.sh"
 
-# Termux:Boot support: if installed, start automatically after phone reboot.
 mkdir -p "$HOME/.termux/boot"
 cat > "$HOME/.termux/boot/tvbox-agent" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
@@ -47,6 +44,6 @@ chmod +x "$HOME/.termux/boot/tvbox-agent"
 pkill -f "$AGENT/loop.sh" 2>/dev/null || true
 nohup "$AGENT/loop.sh" >/dev/null 2>&1 &
 echo $! > "$AGENT/pid"
-echo "TV-BOX Agent aktif: GitHub her 180 saniyede kontrol edilecek."
+echo "TV-BOX Agent aktif: GitHub her 60 saniyede kontrol edilecek."
 echo "Log: $AGENT/agent.log"
 echo "Not: Telefon yeniden basladiginda otomatik baslamasi icin Termux:Boot gerekir."
