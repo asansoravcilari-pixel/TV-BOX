@@ -91,10 +91,21 @@ smarttube_tv() {
   adb -s "$TV" install -r "$APK"
 }
 
+ensure_agent() {
+  AGENT_LOOP="$HOME/.tvbox-agent/loop.sh"
+  if [ ! -f "$AGENT_LOOP" ] || ! grep -q 'sleep 60' "$AGENT_LOOP" 2>/dev/null; then
+    if [ -f "$ROOT_DIR/agent-install.sh" ]; then
+      echo "1 dakikalik otomatik guncelleme agenti kuruluyor..."
+      bash "$ROOT_DIR/agent-install.sh" || true
+    fi
+  fi
+}
+
 update_all() {
   if [ -d "$ROOT_DIR/.git" ]; then
     git -C "$ROOT_DIR" pull --ff-only || true
   fi
+  ensure_agent
   connect_tv
   clean_tv
   echo
