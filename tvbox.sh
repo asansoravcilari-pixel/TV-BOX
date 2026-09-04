@@ -18,6 +18,7 @@ connect_tv() {
 }
 
 has_pkg() { adb -s "$TV" shell "pm path $1" 2>/dev/null | grep -q '^package:'; }
+has_user_pkg() { adb -s "$TV" shell "pm list packages --user 0 $1" 2>/dev/null | grep -qx "package:$1"; }
 
 status_tv() {
   connect_tv
@@ -49,17 +50,17 @@ clean_tv() {
 packages_tv() {
   connect_tv
   echo "=== UCUNCU TARAF ==="
-  adb -s "$TV" shell 'pm list packages -3'
+  adb -s "$TV" shell 'pm list packages -3 --user 0'
   echo
   echo "=== KORUNAN TEMEL PAKETLER ==="
-  for p in com.spocky.projengmenu mvl.studio.tvlite com.tv.mscursor com.google.android.youtube.tv com.google.android.gms com.google.android.gsf com.android.vending; do
-    if has_pkg "$p"; then echo "OK   $p"; else echo "YOK  $p"; fi
+  for p in com.ozdemir.tvlauncher com.spocky.projengmenu mvl.studio.tvlite com.tv.mscursor com.google.android.youtube.tv com.google.android.gms com.google.android.gsf com.android.vending; do
+    if has_user_pkg "$p"; then echo "OK   $p"; else echo "YOK  $p"; fi
   done
 }
 
 smarttube_tv() {
   connect_tv
-  if has_pkg com.teamsmart.videomanager.tv; then
+  if has_user_pkg com.teamsmart.videomanager.tv; then
     echo "SmartTube zaten kurulu."
     return 0
   fi
@@ -80,9 +81,28 @@ smarttube_tv() {
   adb -s "$TV" install -r "$APK"
 }
 
+ozdemir_launcher_tv() {
+  connect_tv
+  APK="$ROOT_DIR/dist/OZDEMIR-TV-OS-Launcher.apk"
+  if [ ! -s "$APK" ]; then
+    echo "OZDEMIR TV OS launcher APK henuz build edilmemis; Projectivy korunuyor."
+    return 0
+  fi
+  echo "OZDEMIR TV OS launcher kuruluyor/guncelleniyor..."
+  if adb -s "$TV" install -r "$APK" >/dev/null; then
+    adb -s "$TV" shell 'cmd package set-home-activity com.ozdemir.tvlauncher/.MainActivity >/dev/null 2>&1 || true'
+    echo "OZDEMIR TV OS HOME aktif."
+  else
+    echo "OZDEMIR launcher kurulumu basarisiz; mevcut HOME degistirilmedi."
+  fi
+}
+
 ensure_home() {
   connect_tv
-  if has_pkg com.spocky.projengmenu; then
+  if has_user_pkg com.ozdemir.tvlauncher; then
+    adb -s "$TV" shell 'cmd package set-home-activity com.ozdemir.tvlauncher/.MainActivity >/dev/null 2>&1 || true'
+    echo "OZDEMIR TV OS HOME kontrol edildi."
+  elif has_user_pkg com.spocky.projengmenu; then
     adb -s "$TV" shell 'cmd package set-home-activity com.spocky.projengmenu/.ui.home.MainActivity >/dev/null 2>&1 || true'
     echo "Projectivy HOME kontrol edildi."
   fi
@@ -117,7 +137,7 @@ safe_debloat() {
     com.vs.newlauncher \
     com.vstrong.resetcheck
   do
-    if has_pkg "$p"; then
+    if has_user_pkg "$p"; then
       adb -s "$TV" shell "pm uninstall --user 0 $p" >/dev/null 2>&1 || true
       echo "Kaldirildi/etkisiz: $p"
     fi
@@ -140,7 +160,6 @@ bootstrap_once() {
   [ -f "$FLAG" ] && return 0
   echo "=== OTOMATIK TV BOX KURULUMU v2 ==="
   safe_debloat
-  ensure_home
   performance_tv
   if smarttube_tv; then
     echo "SmartTube kurulumu tamamlandi/kontrol edildi."
@@ -156,6 +175,8 @@ update_all() {
   ensure_agent
   connect_tv
   bootstrap_once
+  ozdemir_launcher_tv
+  ensure_home
   clean_tv
   echo
   packages_tv
@@ -171,7 +192,8 @@ case "${1:-help}" in
   clean) clean_tv ;;
   packages) packages_tv ;;
   smarttube) smarttube_tv ;;
+  launcher) ozdemir_launcher_tv ; ensure_home ;;
   bootstrap) bootstrap_once ;;
   performance) performance_tv ;;
-  *) echo "Kullanim: tvupdate | tvbox status | clean | packages | smarttube | bootstrap | performance" ;;
+  *) echo "Kullanim: tvupdate | tvbox status | clean | packages | smarttube | launcher | bootstrap | performance" ;;
 esac
