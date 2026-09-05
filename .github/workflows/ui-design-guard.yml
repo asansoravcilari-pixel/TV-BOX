@@ -1,0 +1,21 @@
+name: UI Design Guard
+
+on:
+  push:
+    paths:
+      - 'ozdemir-launcher/**'
+      - 'scripts/check-tv-ui.sh'
+      - 'docs/figma-production-spec.md'
+  pull_request:
+    paths:
+      - 'ozdemir-launcher/**'
+      - 'scripts/check-tv-ui.sh'
+      - 'docs/figma-production-spec.md'
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check TV UI production rules
+        run: bash scripts/check-tv-ui.sh
