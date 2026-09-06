@@ -1,0 +1,170 @@
++        val n = NotificationCompat.Builder(this, "remote_server").setSmallIcon(R.drawable.ic_stat_remote)
+             .setContentTitle("Özdemir Receiver").setContentText("Wi‑Fi kumandası hazır").setOngoing(true).build()
+         if (android.os.Build.VERSION.SDK_INT >= 29) startForeground(11, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) else startForeground(11, n)
+         thread(name="discovery") { Discovery.responder({ prefs.deviceName() }, { prefs.deviceId() }, { running }) }
+@@ -29,8 +33,14 @@
+ 
+     private fun serve() {
+         ServerSocket(Ports.CONTROL).use { server ->
+-            while (running) try { val s = server.accept(); thread { handle(s) } } catch (_: Throwable) { }
++            controlServer = server
++            server.reuseAddress = true
++            while (running) try {
++                val s = server.accept()
++                thread(name = "remote-client") { handle(s) }
++            } catch (_: Throwable) { }
+         }
++        controlServer = null
+     }
+ 
+     private fun handle(s: Socket) {
+@@ -40,13 +50,17 @@
+             val w = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+             val first = JSONObject(r.readLine())
+             when (first.optString("type")) {
+-                "pair_hello" -> handlePair(first, r, w)
++                "pair_hello" -> handlePair(first, r, w, socket.inetAddress?.hostAddress ?: "unknown")
+                 "auth_hello" -> handleAuth(first, socket, r, w)
+             }
+         }
+     }
+ 
+-    private fun handlePair(first: JSONObject, r: BufferedReader, w: BufferedWriter) {
++    private fun handlePair(first: JSONObject, r: BufferedReader, w: BufferedWriter, sourceIp: String) {
++        if (isPairRateLimited(sourceIp)) {
++            w.write(JSONObject().apply { put("type", "pair_error"); put("message", "Çok fazla PIN denemesi. Bir dakika bekleyin.") }.toString())
++            w.newLine(); w.flush(); return
++        }
+         val pairId = first.getString("pairId")
+         val phonePub = Crypto.publicKey(first.getString("publicKey"))
+         val kp = Crypto.ecKeyPair(); val salt = Crypto.randomBytes(16)
+@@ -55,10 +69,34 @@
+         val proof = JSONObject(r.readLine())
+         val expected = Crypto.hmac(key, "phone-proof".toByteArray())
+         val ok = proof.optString("type") == "pair_proof" && runCatching { Crypto.unb64(proof.getString("proof")).contentEquals(expected) }.getOrDefault(false)
+-        if (ok) prefs.savePair(pairId, key)
++        if (ok) {
++            prefs.savePair(pairId, key)
++            pairAttempts.remove(sourceIp)
++        } else {
++            registerPairFailure(sourceIp)
++            Thread.sleep(350)
++        }
+         w.write(JSONObject().apply { put("ok", ok); if (ok) put("proof", Crypto.b64(Crypto.hmac(key, "tv-proof".toByteArray()))) }.toString()); w.newLine(); w.flush()
+     }
+ 
++    private fun isPairRateLimited(ip: String): Boolean {
++        val now = System.currentTimeMillis()
++        val state = pairAttempts[ip] ?: return false
++        if (now - state.startedAt > 60_000) {
++            pairAttempts.remove(ip)
++            return false
++        }
++        return state.failures >= 5
++    }
++
++    private fun registerPairFailure(ip: String) {
++        val now = System.currentTimeMillis()
++        pairAttempts.compute(ip) { _, current ->
++            if (current == null || now - current.startedAt > 60_000) PairAttempts(now, 1)
++            else current.apply { failures++ }
++        }
++    }
++
+     private fun handleAuth(first: JSONObject, socket: Socket, r: BufferedReader, w: BufferedWriter) {
+         val pairId = first.getString("pairId")
+         val key = prefs.pairKey(pairId) ?: run { w.write("{\"ok\":false}\n"); w.flush(); return }
+@@ -86,16 +124,33 @@
+             RemoteAction.SWIPE -> a?.swipe(c.dx ?: 0f, c.dy ?: 0f)
+             RemoteAction.VOL_UP -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+             RemoteAction.VOL_DOWN -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
++            RemoteAction.VOL_SET -> {
++                val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
++                val percent = (c.value ?: 50).coerceIn(0, 100)
++                val index = ((percent / 100f) * max).toInt().coerceIn(0, max)
++                audio.setStreamVolume(AudioManager.STREAM_MUSIC, index, AudioManager.FLAG_SHOW_UI)
++            }
+             RemoteAction.MUTE -> audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, AudioManager.FLAG_SHOW_UI)
+             RemoteAction.PLAY_PAUSE -> audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)).also { audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)) }
++            RemoteAction.MEDIA_PREV -> audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS)).also { audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS)) }
++            RemoteAction.MEDIA_NEXT -> audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_NEXT)).also { audio.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_NEXT)) }
+             RemoteAction.POWER_MENU -> a?.powerMenu()
+-            RemoteAction.START_MIRROR -> startActivity(Intent(this, MirrorActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
++            RemoteAction.START_MIRROR -> c.text?.takeIf { it.length in 16..256 }?.let { token ->
++                startActivity(Intent(this, MirrorActivity::class.java)
++                    .putExtra(MirrorActivity.EXTRA_TOKEN, token)
++                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
++            }
+             RemoteAction.STOP_MIRROR -> sendBroadcast(Intent(MirrorActivity.ACTION_STOP))
+             RemoteAction.LAUNCH_APP -> c.packageName?.let { packageManager.getLeanbackLaunchIntentForPackage(it) ?: packageManager.getLaunchIntentForPackage(it) }?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+             RemoteAction.LIST_APPS -> Unit
+         }
+     }
+ 
+-    override fun onDestroy() { running = false; super.onDestroy() }
++    override fun onDestroy() {
++        running = false
++        runCatching { controlServer?.close() }
++        controlServer = null
++        super.onDestroy()
++    }
+     private fun createChannel() = (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel("remote_server", "Wi‑Fi Kumanda", NotificationManager.IMPORTANCE_LOW))
+ }
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/java/com/ozdemir/remote/tv/TvPrefs.kt ozr_compact/OzdemirRemote/tv/src/main/java/com/ozdemir/remote/tv/TvPrefs.kt
+--- ozr_old/OzdemirRemote/tv/src/main/java/com/ozdemir/remote/tv/TvPrefs.kt	2026-09-06 13:10:47.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/java/com/ozdemir/remote/tv/TvPrefs.kt	2026-09-06 14:34:49.000000000 +0000
+@@ -3,15 +3,52 @@
+ import android.content.Context
+ import android.os.Build
+ import android.util.Base64
++import com.ozdemir.remote.core.SecureKeyStore
+ import java.util.UUID
+ import kotlin.random.Random
+ 
+ class TvPrefs(ctx: Context) {
+     private val p = ctx.getSharedPreferences("receiver", Context.MODE_PRIVATE)
+-    fun deviceId(): String = p.getString("deviceId", null) ?: UUID.randomUUID().toString().also { p.edit().putString("deviceId", it).apply() }
++    private val alias = "ozdemir_remote_tv_pairing"
++
++    fun deviceId(): String = p.getString("deviceId", null)
++        ?: UUID.randomUUID().toString().also { p.edit().putString("deviceId", it).apply() }
++
+     fun deviceName(): String = p.getString("deviceName", null) ?: (Build.MODEL ?: "Next My Box")
+-    fun pin(): String = p.getString("pin", null) ?: Random.nextInt(100000, 999999).toString().also { p.edit().putString("pin", it).apply() }
+-    fun rotatePin(): String = Random.nextInt(100000, 999999).toString().also { p.edit().putString("pin", it).apply() }
+-    fun savePair(pairId: String, key: ByteArray) = p.edit().putString("pair.$pairId", Base64.encodeToString(key, Base64.NO_WRAP)).apply()
+-    fun pairKey(pairId: String): ByteArray? = p.getString("pair.$pairId", null)?.let { Base64.decode(it, Base64.NO_WRAP) }
++
++    fun pin(): String = p.getString("pin", null)
++        ?: Random.nextInt(100000, 999999).toString().also { p.edit().putString("pin", it).apply() }
++
++    fun rotatePin(): String = Random.nextInt(100000, 999999).toString().also {
++        p.edit().putString("pin", it).apply()
++    }
++
++    fun savePair(pairId: String, key: ByteArray) {
++        p.edit()
++            .putString("pair.secure.$pairId", SecureKeyStore.seal(alias, key))
++            .remove("pair.$pairId")
++            .apply()
++    }
++
++    fun pairKey(pairId: String): ByteArray? {
++        p.getString("pair.secure.$pairId", null)?.let { encrypted ->
++            return runCatching { SecureKeyStore.open(alias, encrypted) }.getOrNull()
++        }
++        // Backward-compatible migration from older plaintext Base64 preference.
++        val legacy = p.getString("pair.$pairId", null) ?: return null
++        val decoded = runCatching { Base64.decode(legacy, Base64.NO_WRAP) }.getOrNull() ?: return null
++        runCatching {
++            p.edit()
++                .putString("pair.secure.$pairId", SecureKeyStore.seal(alias, decoded))
++                .remove("pair.$pairId")
++                .apply()
++        }
++        return decoded
++    }
++
++    fun clearPairs() {
++        val e = p.edit()
++        p.all.keys.filter { it.startsWith("pair.") || it.startsWith("pair.secure.") }.forEach(e::remove)
