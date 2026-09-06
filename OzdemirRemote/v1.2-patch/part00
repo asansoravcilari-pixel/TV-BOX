@@ -1,0 +1,190 @@
+diff -ruN ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Crypto.kt ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Crypto.kt
+--- ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Crypto.kt	2026-09-06 13:10:47.000000000 +0000
++++ ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Crypto.kt	2026-09-06 14:34:34.000000000 +0000
+@@ -47,18 +47,18 @@
+     fun randomBytes(n: Int): ByteArray = ByteArray(n).also(random::nextBytes)
+     fun b64(b: ByteArray): String = Base64.encodeToString(b, Base64.NO_WRAP)
+     fun unb64(s: String): ByteArray = Base64.decode(s, Base64.NO_WRAP)
++    fun sha256(data: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(data)
+ 
+-    fun encrypt(key: ByteArray, counter: Long, plaintext: ByteArray): String {
++    fun encryptRaw(key: ByteArray, counter: Long, plaintext: ByteArray): ByteArray {
+         val iv = randomBytes(12)
+         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key.copyOf(32), "AES"), GCMParameterSpec(128, iv))
+         cipher.updateAAD(ByteBuffer.allocate(8).putLong(counter).array())
+-        val encrypted = cipher.doFinal(plaintext)
+-        return b64(iv + encrypted)
++        return iv + cipher.doFinal(plaintext)
+     }
+ 
+-    fun decrypt(key: ByteArray, counter: Long, payloadB64: String): ByteArray {
+-        val blob = unb64(payloadB64)
++    fun decryptRaw(key: ByteArray, counter: Long, blob: ByteArray): ByteArray {
++        require(blob.size > 12) { "Invalid encrypted payload" }
+         val iv = blob.copyOfRange(0, 12)
+         val encrypted = blob.copyOfRange(12, blob.size)
+         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+@@ -66,4 +66,10 @@
+         cipher.updateAAD(ByteBuffer.allocate(8).putLong(counter).array())
+         return cipher.doFinal(encrypted)
+     }
++
++    fun encrypt(key: ByteArray, counter: Long, plaintext: ByteArray): String =
++        b64(encryptRaw(key, counter, plaintext))
++
++    fun decrypt(key: ByteArray, counter: Long, payloadB64: String): ByteArray =
++        decryptRaw(key, counter, unb64(payloadB64))
+ }
+diff -ruN ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Protocol.kt ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Protocol.kt
+--- ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Protocol.kt	2026-09-06 13:10:47.000000000 +0000
++++ ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/Protocol.kt	2026-09-06 17:36:50.018296020 +0000
+@@ -6,7 +6,7 @@
+ 
+ enum class RemoteAction {
+     UP, DOWN, LEFT, RIGHT, OK, BACK, HOME, RECENTS,
+-    VOL_UP, VOL_DOWN, MUTE, PLAY_PAUSE, POWER_MENU,
++    VOL_UP, VOL_DOWN, VOL_SET, MUTE, PLAY_PAUSE, MEDIA_PREV, MEDIA_NEXT, POWER_MENU,
+     TEXT, SWIPE, START_MIRROR, STOP_MIRROR, LIST_APPS, LAUNCH_APP
+ }
+ 
+@@ -15,6 +15,7 @@
+     val text: String? = null,
+     val dx: Float? = null,
+     val dy: Float? = null,
++    val value: Int? = null,
+     val packageName: String? = null
+ ) {
+     fun toJson() = JSONObject().apply {
+@@ -23,6 +24,7 @@
+         text?.let { put("text", it) }
+         dx?.let { put("dx", it.toDouble()) }
+         dy?.let { put("dy", it.toDouble()) }
++        value?.let { put("value", it) }
+         packageName?.let { put("package", it) }
+     }
+ 
+@@ -32,6 +34,7 @@
+             text = o.optString("text").takeIf { it.isNotEmpty() },
+             dx = if (o.has("dx")) o.getDouble("dx").toFloat() else null,
+             dy = if (o.has("dy")) o.getDouble("dy").toFloat() else null,
++            value = if (o.has("value")) o.getInt("value") else null,
+             packageName = o.optString("package").takeIf { it.isNotEmpty() }
+         )
+     }
+diff -ruN ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt
+--- ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt	2026-09-06 13:11:58.000000000 +0000
++++ ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt	2026-09-06 14:35:42.000000000 +0000
+@@ -58,6 +58,9 @@
+             }
+             w.write(hello.toString()); w.newLine(); w.flush()
+             val challenge = JSONObject(r.readLine())
++            if (challenge.optString("type") == "pair_error") {
++                error(challenge.optString("message", "Eşleştirme geçici olarak engellendi"))
++            }
+             require(challenge.getString("type") == "pair_challenge")
+             val tvPub = Crypto.publicKey(challenge.getString("publicKey"))
+             val salt = Crypto.unb64(challenge.getString("salt"))
+diff -ruN ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureKeyStore.kt ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureKeyStore.kt
+--- ozr_old/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureKeyStore.kt	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/core/src/main/java/com/ozdemir/remote/core/SecureKeyStore.kt	2026-09-06 14:34:34.000000000 +0000
+@@ -0,0 +1,50 @@
++package com.ozdemir.remote.core
++
++import android.security.keystore.KeyGenParameterSpec
++import android.security.keystore.KeyProperties
++import android.util.Base64
++import java.security.KeyStore
++import javax.crypto.Cipher
++import javax.crypto.KeyGenerator
++import javax.crypto.SecretKey
++import javax.crypto.spec.GCMParameterSpec
++
++/** Small Android Keystore wrapper used to keep pairing keys out of plaintext SharedPreferences. */
++object SecureKeyStore {
++    private const val STORE = "AndroidKeyStore"
++
++    private fun key(alias: String): SecretKey {
++        val ks = KeyStore.getInstance(STORE).apply { load(null) }
++        (ks.getKey(alias, null) as? SecretKey)?.let { return it }
++        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, STORE).run {
++            init(
++                KeyGenParameterSpec.Builder(
++                    alias,
++                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
++                )
++                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
++                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
++                    .setRandomizedEncryptionRequired(true)
++                    .build()
++            )
++            generateKey()
++        }
++    }
++
++    fun seal(alias: String, plaintext: ByteArray): String {
++        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
++        cipher.init(Cipher.ENCRYPT_MODE, key(alias))
++        val blob = cipher.iv + cipher.doFinal(plaintext)
++        return Base64.encodeToString(blob, Base64.NO_WRAP)
++    }
++
++    fun open(alias: String, encoded: String): ByteArray {
++        val blob = Base64.decode(encoded, Base64.NO_WRAP)
++        require(blob.size > 12) { "Invalid encrypted key blob" }
++        val iv = blob.copyOfRange(0, 12)
++        val ciphertext = blob.copyOfRange(12, blob.size)
++        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
++        cipher.init(Cipher.DECRYPT_MODE, key(alias), GCMParameterSpec(128, iv))
++        return cipher.doFinal(ciphertext)
++    }
++}
+diff -ruN ozr_old/OzdemirRemote/phone/build.gradle.kts ozr_compact/OzdemirRemote/phone/build.gradle.kts
+--- ozr_old/OzdemirRemote/phone/build.gradle.kts	2026-09-06 13:11:58.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/build.gradle.kts	2026-09-06 17:36:50.018103770 +0000
+@@ -10,8 +10,8 @@
+         applicationId = "com.ozdemir.remote.phone"
+         minSdk = 29
+         targetSdk = 36
+-        versionCode = 1
+-        versionName = "1.0.0"
++        versionCode = 3
++        versionName = "1.2.0"
+     }
+     buildFeatures { compose = true }
+ }
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/AndroidManifest.xml ozr_compact/OzdemirRemote/phone/src/main/AndroidManifest.xml
+--- ozr_old/OzdemirRemote/phone/src/main/AndroidManifest.xml	2026-09-06 13:11:58.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/AndroidManifest.xml	2026-09-06 14:36:44.000000000 +0000
+@@ -5,13 +5,26 @@
+     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+-    <application android:theme="@style/Theme.OzdemirRemote" android:label="Özdemir Remote" android:usesCleartextTraffic="true">
+-        <activity android:name=".MainActivity" android:exported="true">
++
++    <application
++        android:theme="@style/Theme.OzdemirRemote"
++        android:label="Özdemir Remote"
++        android:icon="@mipmap/ic_launcher"
++        android:roundIcon="@mipmap/ic_launcher_round"
++        android:allowBackup="false"
++        android:usesCleartextTraffic="false"
++        android:supportsRtl="true">
++        <activity
++            android:name=".MainActivity"
++            android:exported="true">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+             </intent-filter>
+         </activity>
+-        <service android:name=".MirrorSenderService" android:exported="false" android:foregroundServiceType="mediaProjection" />
++        <service
++            android:name=".MirrorSenderService"
++            android:exported="false"
++            android:foregroundServiceType="mediaProjection" />
+     </application>
+ </manifest>
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt
+--- ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt	2026-09-06 14:19:18.000000000 +0000
