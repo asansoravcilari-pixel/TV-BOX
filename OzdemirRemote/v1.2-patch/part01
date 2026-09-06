@@ -1,0 +1,225 @@
++++ ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt	2026-09-06 17:36:50.018740570 +0000
+@@ -1,6 +1,9 @@
+ package com.ozdemir.remote.phone
+ 
++import android.Manifest
+ import android.app.Activity
++import android.content.pm.PackageManager
++import android.os.Build
+ import android.content.Context
+ import android.content.Intent
+ import android.media.projection.MediaProjectionManager
+@@ -69,6 +72,9 @@
+ class MainActivity : ComponentActivity() {
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
++        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
++            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
++        }
+         setContent {
+             MaterialTheme(colorScheme = RemoteColors) {
+                 RemoteApp()
+@@ -77,6 +83,8 @@
+     }
+ }
+ 
++private enum class AppStage { SPLASH, CONNECTING, PAIRING, REMOTE, DISCONNECTED }
++
+ private enum class RemoteTab(val label: String, val glyph: String) {
+     REMOTE("Kumanda", "⌁"),
+     KEYBOARD("Klavye", "⌨"),
+@@ -91,82 +99,195 @@
+     val prefs = remember { Prefs(ctx) }
+ 
+     var stored by remember { mutableStateOf(prefs.load()) }
+-    var status by remember { mutableStateOf(if (stored == null) "Cihaz aranıyor" else "Bağlı • ${stored!!.device.name}") }
++    var status by remember { mutableStateOf(if (stored == null) "Cihaz aranıyor" else "Bağlanıyor • ${stored!!.device.name}") }
++    var stage by remember { mutableStateOf(AppStage.SPLASH) }
+     val conn = remember(stored) { stored?.let(::RemoteConnection) }
+ 
+-    DisposableEffect(conn) {
+-        onDispose { conn?.close() }
++    DisposableEffect(conn) { onDispose { conn?.close() } }
++
++    LaunchedEffect(Unit) {
++        delay(900)
++        stage = if (stored == null) AppStage.PAIRING else AppStage.CONNECTING
++    }
++
++    LaunchedEffect(stage, stored) {
++        if (stage == AppStage.CONNECTING && stored != null) {
++            status = "TV'ye bağlanılıyor…"
++            val result = withContext(Dispatchers.IO) { runCatching { conn?.connect() } }
++            if (result.isSuccess) {
++                status = "Bağlı • ${stored!!.device.name}"
++                stage = AppStage.REMOTE
++            } else {
++                status = "Bağlantı kurulamadı"
++                stage = AppStage.DISCONNECTED
++            }
++        }
+     }
+ 
+     val projection = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+     val mirrorLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+         if (result.resultCode == Activity.RESULT_OK && result.data != null && stored != null) {
++            val mirrorToken = Crypto.b64(Crypto.randomBytes(24))
+             scope.launch(Dispatchers.IO) {
+-                runCatching { conn?.send(Command(RemoteAction.START_MIRROR)) }
++                runCatching { conn?.send(Command(RemoteAction.START_MIRROR, text = mirrorToken)) }
+             }
+             val i = Intent(ctx, MirrorSenderService::class.java).apply {
+                 putExtra("resultCode", result.resultCode)
+                 putExtra("data", result.data)
+                 putExtra("host", stored!!.device.host)
++                putExtra("mirrorToken", mirrorToken)
+             }
+             ctx.startForegroundService(i)
+         }
+     }
+ 
+-    Box(
+-        modifier = Modifier
+-            .fillMaxSize()
+-            .background(Void)
+-    ) {
++    Box(Modifier.fillMaxSize().background(Void)) {
+         AmbientBackground()
+ 
+-        if (stored == null) {
+-            PairingScreen(
++        when (stage) {
++            AppStage.SPLASH -> SplashScreen()
++            AppStage.CONNECTING -> ConnectingScreen(stored?.device?.name ?: "Next My Box", status)
++            AppStage.PAIRING -> PairingScreen(
+                 status = status,
+                 onStatusChange = { status = it },
+                 prefs = prefs,
+                 onPaired = {
+                     stored = prefs.load()
+-                    status = "Bağlı • ${stored?.device?.name ?: "Next My Box"}"
++                    status = "Eşleşti • ${stored?.device?.name ?: "Next My Box"}"
++                    stage = AppStage.CONNECTING
+                 }
+             )
+-        } else {
+-            fun send(action: RemoteAction, text: String? = null, dx: Float? = null, dy: Float? = null) {
+-                scope.launch(Dispatchers.IO) {
+-                    try {
+-                        conn?.send(Command(action, text, dx, dy))
+-                        withContext(Dispatchers.Main) {
+-                            status = "Bağlı • ${stored!!.device.name}"
+-                        }
+-                    } catch (t: Throwable) {
+-                        withContext(Dispatchers.Main) {
+-                            status = "Bağlantı hatası • ${t.message ?: "yeniden deneyin"}"
+-                        }
+-                    }
+-                }
+-            }
+-
+-            ConnectedRemote(
+-                stored = stored!!,
++            AppStage.DISCONNECTED -> DisconnectScreen(
+                 status = status,
+-                onSend = ::send,
+-                onMirrorStart = { mirrorLauncher.launch(projection.createScreenCaptureIntent()) },
+-                onMirrorStop = {
+-                    ctx.stopService(Intent(ctx, MirrorSenderService::class.java))
+-                    send(RemoteAction.STOP_MIRROR)
++                onReconnect = {
++                    stage = if (stored == null) AppStage.PAIRING else AppStage.CONNECTING
+                 },
+-                onForget = {
++                onNewDevice = {
+                     conn?.close()
+                     prefs.clear()
+                     stored = null
+                     status = "Cihaz aranıyor"
++                    stage = AppStage.PAIRING
+                 }
+             )
++            AppStage.REMOTE -> {
++                fun send(action: RemoteAction, text: String? = null, dx: Float? = null, dy: Float? = null, value: Int? = null) {
++                    scope.launch(Dispatchers.IO) {
++                        try {
++                            conn?.send(Command(action, text, dx, dy, value = value))
++                            withContext(Dispatchers.Main) { status = "Bağlı • ${stored!!.device.name}" }
++                        } catch (t: Throwable) {
++                            withContext(Dispatchers.Main) {
++                                status = "Bağlantı kesildi"
++                                stage = AppStage.DISCONNECTED
++                            }
++                        }
++                    }
++                }
++
++                ConnectedRemote(
++                    stored = stored!!,
++                    status = status,
++                    onSend = { action, text, dx, dy -> send(action, text, dx, dy, null) },
++                    onSetVolume = { level -> send(RemoteAction.VOL_SET, value = level) },
++                    onMirrorStart = { mirrorLauncher.launch(projection.createScreenCaptureIntent()) },
++                    onMirrorStop = {
++                        ctx.stopService(Intent(ctx, MirrorSenderService::class.java))
++                        send(RemoteAction.STOP_MIRROR)
++                    },
++                    onForget = {
++                        conn?.close()
++                        status = "Bağlantı kapatıldı"
++                        stage = AppStage.DISCONNECTED
++                    }
++                )
++            }
+         }
+     }
+ }
+ 
+ @Composable
++private fun SplashScreen() {
++    Column(
++        Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 28.dp),
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.Center
++    ) {
++        Box(
++            Modifier.size(104.dp).clip(RoundedCornerShape(30.dp))
++                .background(Brush.linearGradient(listOf(Purple, Cyan)))
++                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(30.dp)),
++            contentAlignment = Alignment.Center
++        ) { Text("ÖR", fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color.White) }
++        Spacer(Modifier.height(28.dp))
++        Text("ÖZDEMİR REMOTE", fontWeight = FontWeight.Black, fontSize = 25.sp, letterSpacing = 1.sp)
++        Spacer(Modifier.height(7.dp))
++        Text("TV CONTROL • SECURE LAN", color = Cyan, fontSize = 10.sp, letterSpacing = 1.6.sp)
++        Spacer(Modifier.height(42.dp))
++        LinearProgressIndicator(
++            modifier = Modifier.fillMaxWidth(0.55f).height(4.dp).clip(RoundedCornerShape(99.dp)),
++            color = Cyan,
++            trackColor = Color.White.copy(alpha = 0.08f)
++        )
++        Spacer(Modifier.height(13.dp))
++        Text("Başlatılıyor…", color = TextSecondary, fontSize = 11.sp)
++    }
++}
++
++@Composable
++private fun ConnectingScreen(deviceName: String, status: String) {
++    Column(
++        Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp),
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.Center
++    ) {
++        BrandHeader(compact = false)
++        Spacer(Modifier.height(46.dp))
++        Box(
++            Modifier.size(132.dp).clip(CircleShape)
++                .background(Cyan.copy(alpha = 0.08f))
++                .border(1.dp, Cyan.copy(alpha = 0.30f), CircleShape),
++            contentAlignment = Alignment.Center
++        ) {
++            CircularProgressIndicator(color = Cyan, strokeWidth = 3.dp, modifier = Modifier.size(84.dp))
++            Text("TV", fontWeight = FontWeight.Black, fontSize = 22.sp)
++        }
++        Spacer(Modifier.height(28.dp))
++        Text("TV'YE BAĞLANILIYOR", fontWeight = FontWeight.Black, fontSize = 19.sp, letterSpacing = 1.sp)
