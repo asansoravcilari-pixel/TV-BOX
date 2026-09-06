@@ -1,0 +1,61 @@
+name: Build Ozdemir Remote APKs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'OzdemirRemote/**'
+      - '.github/workflows/ozdemir-remote-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Reconstruct source package
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ozremote"
+          cat OzdemirRemote/build-payload/part*.b64 | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
+          unzip -q "$RUNNER_TEMP/OzdemirRemote-source.zip" -d "$RUNNER_TEMP/ozremote"
+          test -f "$RUNNER_TEMP/ozremote/OzdemirRemote/settings.gradle.kts"
+
+      - name: Build phone and TV APKs
+        working-directory: ${{ runner.temp }}/ozremote/OzdemirRemote
+        run: gradle :phone:assembleDebug :tv:assembleDebug --stacktrace
+
+      - name: Collect APKs
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p out
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/phone/build/outputs/apk/debug/phone-debug.apk" out/Ozdemir-Remote-Phone-debug.apk
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/tv/build/outputs/apk/debug/tv-debug.apk" out/Ozdemir-Receiver-TV-debug.apk
+
+      - name: Upload APKs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ozdemir-Remote-APKs
+          path: out/*.apk
+          if-no-files-found: error
