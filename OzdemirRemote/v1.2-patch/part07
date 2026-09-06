@@ -1,0 +1,88 @@
++        e.apply()
++    }
+ }
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_background.xml ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_background.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_background.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_background.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <solid android:color="@color/icon_background"/>
++</shape>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_foreground.xml ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_foreground.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_foreground.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_foreground.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,12 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp" android:height="108dp"
++    android:viewportWidth="108" android:viewportHeight="108">
++    <path android:fillColor="#06B6D4" android:pathData="M18,24 L90,24 C96.63,24 102,29.37 102,36 L102,76 C102,82.63 96.63,88 90,88 L18,88 C11.37,88 6,82.63 6,76 L6,36 C6,29.37 11.37,24 18,24 Z"/>
++    <path android:fillColor="#0D0F14" android:pathData="M16,34 L92,34 L92,74 L16,74 Z"/>
++    <path android:fillColor="#F9FAFB" android:pathData="M47,78 L61,78 L64,84 L44,84 Z"/>
++    <path android:fillColor="#7C3AED" android:pathData="M54,42 C62.84,42 70,49.16 70,58 C70,66.84 62.84,74 54,74 C45.16,74 38,66.84 38,58 C38,49.16 45.16,42 54,42 Z"/>
++    <path android:fillColor="#F9FAFB" android:pathData="M49,51 L63,58 L49,65 Z"/>
++    <path android:fillColor="#06B6D4" android:pathData="M27,43 C34,36 43,32 54,32 C65,32 74,36 81,43 L77,47 C70.8,40.8 63.2,38 54,38 C44.8,38 37.2,40.8 31,47 Z"/>
++    <path android:fillColor="#7C3AED" android:pathData="M34,49 C39.2,43.8 45.6,41 54,41 C62.4,41 68.8,43.8 74,49 L70,53 C65.6,48.6 60.6,47 54,47 C47.4,47 42.4,48.6 38,53 Z"/>
++</vector>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_legacy.xml ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_legacy.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_legacy.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_launcher_legacy.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item android:drawable="@drawable/ic_launcher_background"/>
++    <item android:drawable="@drawable/ic_launcher_foreground" android:gravity="center"/>
++</layer-list>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_stat_remote.xml ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_stat_remote.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/drawable/ic_stat_remote.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/drawable/ic_stat_remote.xml	2026-09-06 14:37:17.000000000 +0000
+@@ -0,0 +1,4 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="#FFFFFFFF" android:pathData="M7,2h10a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2H7a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM12,5a1.5,1.5 0,1 0,0 3,1.5 1.5,0 0,0 0,-3zM12,10a3,3 0,1 0,0 6,3 3,0 0,0 0,-6z"/>
++</vector>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/drawable/tv_banner.xml ozr_compact/OzdemirRemote/tv/src/main/res/drawable/tv_banner.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/drawable/tv_banner.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/drawable/tv_banner.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
++    <item>
++        <shape android:shape="rectangle">
++            <corners android:radius="18dp"/>
++            <gradient android:startColor="#160020" android:endColor="#07111F" android:angle="0"/>
++            <stroke android:width="2dp" android:color="#3306B6D4"/>
++        </shape>
++    </item>
++    <item android:left="120dp" android:right="120dp" android:top="18dp" android:bottom="18dp" android:drawable="@drawable/ic_launcher_foreground"/>
++</layer-list>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher.xml ozr_compact/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
++    <background android:drawable="@drawable/ic_launcher_background"/>
++    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
++</adaptive-icon>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml ozr_compact/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
++    <background android:drawable="@drawable/ic_launcher_background"/>
++    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
++</adaptive-icon>
+diff -ruN ozr_old/OzdemirRemote/tv/src/main/res/values/colors.xml ozr_compact/OzdemirRemote/tv/src/main/res/values/colors.xml
+--- ozr_old/OzdemirRemote/tv/src/main/res/values/colors.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/tv/src/main/res/values/colors.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <color name="icon_background">#0D0F14</color>
++    <color name="icon_cyan">#06B6D4</color>
++    <color name="icon_purple">#7C3AED</color>
++    <color name="icon_white">#F9FAFB</color>
++</resources>
