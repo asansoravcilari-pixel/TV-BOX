@@ -48,7 +48,7 @@ jobs:
             OzdemirRemote/v1.2-full/part05.b64 \
             | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
 
-          EXPECTED_SHA="a39bbd1113d27da53c983e81d47d58718ffaf2c157210ac1a2c6478fbd7c94c1"
+          EXPECTED_SHA="b40b94366af1d701a2e61f0d51e2ba12faf9ac56fa3cb9756355a956d401af68"
           ACTUAL_SHA="$(sha256sum "$RUNNER_TEMP/OzdemirRemote-source.zip" | awk '{print $1}')"
           echo "source sha256=$ACTUAL_SHA"
           test "$ACTUAL_SHA" = "$EXPECTED_SHA"
