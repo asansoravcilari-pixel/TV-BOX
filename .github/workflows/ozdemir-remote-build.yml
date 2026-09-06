@@ -2,7 +2,7 @@ name: Build Ozdemir Remote APKs
 
 on:
   push:
-    branches: [ main, ozremote-v1.2.0-figma ]
+    branches: [ main, ozremote-v1.2.0-finalprod ]
     paths:
       - 'OzdemirRemote/**'
       - '.github/workflows/ozdemir-remote-build.yml'
@@ -32,36 +32,71 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Reconstruct and apply v1.2 Figma implementation
+      - name: Reconstruct exact v1.2 Figma source
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ozremote"
-          cat OzdemirRemote/build-payload/part*.b64 | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
+          cat \
+            OzdemirRemote/v1.2-full/part00.b64 \
+            OzdemirRemote/v1.2-full/part01.b64 \
+            OzdemirRemote/v1.2-full/p2a.b64 \
+            OzdemirRemote/v1.2-full/p2b0.b64 \
+            OzdemirRemote/v1.2-full/p2b1.b64 \
+            OzdemirRemote/v1.2-full/p2b2.b64 \
+            OzdemirRemote/v1.2-full/p2b30.b64 \
+            OzdemirRemote/v1.2-full/p2b31.b64 \
+            OzdemirRemote/v1.2-full/p2b32.b64 \
+            OzdemirRemote/v1.2-full/p2b33.b64 \
+            OzdemirRemote/v1.2-full/p2c.b64 \
+            OzdemirRemote/v1.2-full/p2d.b64 \
+            OzdemirRemote/v1.2-full/part03.b64 \
+            OzdemirRemote/v1.2-full/part04.b64 \
+            OzdemirRemote/v1.2-full/part05.b64 \
+            | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
+          echo "a39bbd1113d27da53c983e81d47d58718ffaf2c157210ac1a2c6478fbd7c94c1  $RUNNER_TEMP/OzdemirRemote-source.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/OzdemirRemote-source.zip" -d "$RUNNER_TEMP/ozremote"
           ROOT="$RUNNER_TEMP/ozremote/OzdemirRemote"
           test -f "$ROOT/settings.gradle.kts"
-          cat OzdemirRemote/v1.2-patch/part* > "$RUNNER_TEMP/ozremote-v1.2.patch"
-          (cd "$ROOT" && patch -p2 < "$RUNNER_TEMP/ozremote-v1.2.patch")
+          grep -q 'versionName = "1.2.0"' "$ROOT/phone/build.gradle.kts"
+          grep -q 'versionName = "1.2.0"' "$ROOT/tv/build.gradle.kts"
+
+          # GitHub runner currently builds against Android 36. Keep source semantics,
+          # only adapt unavailable build-time versions on CI.
           sed -i 's/compileSdk = 37/compileSdk = 36/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts" "$ROOT/core/build.gradle.kts"
           sed -i 's/compose-bom:2026.08.00/compose-bom:2026.06.00/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
           sed -i 's/activity-compose:1.13.0/activity-compose:1.12.2/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
+
           python3 - <<'PY'
           import os
           from pathlib import Path
           root = Path(os.environ['RUNNER_TEMP']) / 'ozremote' / 'OzdemirRemote'
+
           main = root / 'phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt'
           s = main.read_text()
           if 'import androidx.activity.compose.setContent\n' not in s:
               s = s.replace('import androidx.activity.ComponentActivity\n', 'import androidx.activity.ComponentActivity\nimport androidx.activity.compose.setContent\n')
           main.write_text(s)
+
           mirror = root / 'phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt'
           s = mirror.read_text()
-          old = '''        projection = mgr.getMediaProjection(resultCode, data).also { p ->\n            p.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)\n        }\n'''
-          new = '''        val activeProjection = mgr.getMediaProjection(resultCode, data) ?: run {\n            running = false\n            stopSelf()\n            return\n        }\n        activeProjection.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)\n        projection = activeProjection\n'''
-          s = s.replace(old, new)
+          old = '''        projection = mgr.getMediaProjection(resultCode, data).also { p ->
+            p.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)
+        }
+'''
+          new = '''        val activeProjection = mgr.getMediaProjection(resultCode, data) ?: run {
+            running = false
+            stopSelf()
+            return
+        }
+        activeProjection.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)
+        projection = activeProjection
+'''
+          if old in s:
+              s = s.replace(old, new)
           s = s.replace('        projection!!.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n', '        activeProjection.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n')
           mirror.write_text(s)
+
           tvserver = root / 'tv/src/main/java/com/ozdemir/remote/tv/RemoteServerService.kt'
           s = tvserver.read_text()
           if 'import com.ozdemir.remote.core.RemoteAction\n' not in s:
