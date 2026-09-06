@@ -15,6 +15,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            minifyEnabled false
+        }
+        preview {
+            initWith debug
+            applicationIdSuffix '.preview'
+            versionNameSuffix '-preview'
+            debuggable true
+            matchingFallbacks = ['debug']
+        }
         release {
             minifyEnabled false
         }
