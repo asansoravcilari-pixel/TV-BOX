@@ -2,7 +2,7 @@ name: Build Ozdemir Remote APKs
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, ozremote-v1.2.0-figma ]
     paths:
       - 'OzdemirRemote/**'
       - '.github/workflows/ozdemir-remote-build.yml'
@@ -32,14 +32,17 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Reconstruct and patch source package
+      - name: Reconstruct and apply v1.2 Figma implementation
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ozremote"
           cat OzdemirRemote/build-payload/part*.b64 | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
           unzip -q "$RUNNER_TEMP/OzdemirRemote-source.zip" -d "$RUNNER_TEMP/ozremote"
           ROOT="$RUNNER_TEMP/ozremote/OzdemirRemote"
           test -f "$ROOT/settings.gradle.kts"
+          cat OzdemirRemote/v1.2-patch/part* > "$RUNNER_TEMP/ozremote-v1.2.patch"
+          (cd "$ROOT" && patch -p2 < "$RUNNER_TEMP/ozremote-v1.2.patch")
           sed -i 's/compileSdk = 37/compileSdk = 36/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts" "$ROOT/core/build.gradle.kts"
           sed -i 's/compose-bom:2026.08.00/compose-bom:2026.06.00/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
           sed -i 's/activity-compose:1.13.0/activity-compose:1.12.2/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
@@ -70,18 +73,19 @@ jobs:
         working-directory: ${{ runner.temp }}/ozremote/OzdemirRemote
         run: gradle :phone:assembleDebug :tv:assembleDebug --stacktrace
 
-      - name: Collect APKs
+      - name: Collect APKs and checksums
         if: success()
         shell: bash
         run: |
           mkdir -p out
-          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/phone/build/outputs/apk/debug/phone-debug.apk" out/Ozdemir-Remote-Phone-debug.apk
-          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/tv/build/outputs/apk/debug/tv-debug.apk" out/Ozdemir-Receiver-TV-debug.apk
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/phone/build/outputs/apk/debug/phone-debug.apk" out/Ozdemir-Remote-Phone-v1.2.0-debug.apk
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/tv/build/outputs/apk/debug/tv-debug.apk" out/Ozdemir-Receiver-TV-v1.2.0-debug.apk
+          (cd out && sha256sum *.apk > APK-SHA256.txt)
 
       - name: Upload APKs
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Ozdemir-Remote-APKs
-          path: out/*.apk
+          name: Ozdemir-Remote-APKs-v1.2.0-Figma
+          path: out/*
           if-no-files-found: error
