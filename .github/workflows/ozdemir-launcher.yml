@@ -48,3 +48,12 @@ jobs:
           git add ozdemir-launcher/app/src/main/res/drawable-nodpi/home_figma.png
           git diff --cached --quiet || git commit -m 'Build OZDEMIR TV OS launcher APK and pin Figma home asset'
           git push
+
+      - name: Upload OS APPELE TV APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OS-APPELE-TV-v1.0
+          path: |
+            dist/OZDEMIR-TV-OS-Launcher.apk
+            dist/OZDEMIR-TV-OS-Launcher.sha256
+          if-no-files-found: error
