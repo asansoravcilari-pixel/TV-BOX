@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -70,14 +71,7 @@ public class LiveTvActivity extends Activity {
         player = new ExoPlayer.Builder(this).build();
         player.addListener(new Player.Listener() {
             @Override public void onPlayerError(PlaybackException error) {
-                if (playbackStatus != null) playbackStatus.setText("Stream Error   •   MENU / GUIDE: Kanal Listesi");
-            }
-
-            @Override public void onPlaybackStateChanged(int state) {
-                if (playbackStatus == null || channels.isEmpty()) return;
-                if (state == Player.STATE_BUFFERING) playbackStatus.setText("Buffering   •   " + channels.get(channelIndex));
-                else if (state == Player.STATE_READY) playbackStatus.setText("Playing   •   " + channels.get(channelIndex));
-                else if (state == Player.STATE_ENDED) playbackStatus.setText("No Signal   •   Yayın sona erdi");
+                if (playbackStatus != null) playbackStatus.setText("Stream Error   •   INFO: İçerik Merkezi");
             }
         });
 
@@ -155,9 +149,9 @@ public class LiveTvActivity extends Activity {
 
     private void buildPlayerCard() {
         playerCard = new FrameLayout(this);
-        playerCard.setId(View.generateViewId());
         playerCard.setFocusable(true);
         playerCard.setFocusableInTouchMode(true);
+        playerCard.setClickable(true);
         playerCard.setBackground(round(SURFACE, 30, 0, 0));
         place(playerCard, 96, 139, 1260, 650);
 
@@ -165,12 +159,16 @@ public class LiveTvActivity extends Activity {
         placeInside(playerCard, heading, 24, 20, 600, 42);
 
         FrameLayout playerShell = new FrameLayout(this);
+        playerShell.setFocusable(false);
+        playerShell.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         playerShell.setBackground(round(SURFACE_2, 26, 1, ACCENT));
         placeInside(playerCard, playerShell, 24, 76, 1212, 480);
 
         playerView = new PlayerView(this);
         playerView.setUseController(false);
         playerView.setKeepContentOnPlayerReset(true);
+        playerView.setFocusable(false);
+        playerView.setFocusableInTouchMode(false);
         playerView.setPlayer(player);
         playerView.setBackgroundColor(0xFF0B1421);
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, -1);
@@ -184,10 +182,23 @@ public class LiveTvActivity extends Activity {
         catalogStatus.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         placeInside(playerCard, catalogStatus, 930, 22, 280, 34);
 
-        TextView listHint = text("MENU / GUIDE: Kanal Listesi   •   INFO: İçerik Merkezi", 15, false, TEXT_2);
-        placeInside(playerCard, listHint, 24, 610, 860, 26);
-
-        playerCard.setOnFocusChangeListener((v, focused) -> v.setBackground(round(SURFACE, 30, focused ? 2 : 0, focused ? ACCENT : 0)));
+        playerCard.setOnFocusChangeListener((v, focused) -> v.setBackground(round(SURFACE, 30, focused ? 3 : 0, focused ? ACCENT : 0)));
+        playerCard.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                focusCurrentRow();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) {
+                changeChannel(1, false);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+                changeChannel(-1, false);
+                return true;
+            }
+            return false;
+        });
     }
 
     private void buildChannelListCard() {
@@ -196,17 +207,14 @@ public class LiveTvActivity extends Activity {
         place(card, 1380, 139, 444, 650);
 
         TextView heading = text("Kanal Listesi", 28, true, Color.WHITE);
-        placeInside(card, heading, 20, 18, 260, 40);
-
-        TextView hint = text("OK ile seç", 15, false, TEXT_2);
-        hint.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        placeInside(card, hint, 285, 20, 135, 36);
+        placeInside(card, heading, 20, 18, 300, 40);
 
         listWrap = new ScrollView(this);
         listWrap.setFillViewport(false);
         listWrap.setVerticalScrollBarEnabled(false);
-        listWrap.setBackgroundColor(Color.TRANSPARENT);
+        listWrap.setSmoothScrollingEnabled(true);
         listWrap.setFocusable(false);
+        listWrap.setBackgroundColor(Color.TRANSPARENT);
         FrameLayout.LayoutParams sw = new FrameLayout.LayoutParams(404, 570);
         sw.leftMargin = 20;
         sw.topMargin = 64;
@@ -214,6 +222,8 @@ public class LiveTvActivity extends Activity {
 
         channelList = new LinearLayout(this);
         channelList.setOrientation(LinearLayout.VERTICAL);
+        channelList.setFocusable(false);
+        channelList.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         channelList.setPadding(0, 0, 0, 18);
         listWrap.addView(channelList, new ScrollView.LayoutParams(-1, -2));
         rebuildList();
@@ -255,6 +265,9 @@ public class LiveTvActivity extends Activity {
     private void rebuildList() {
         if (channelList == null) return;
         channelList.removeAllViews();
+        TextView first = null;
+        TextView previous = null;
+
         for (int i = 0; i < channels.size(); i++) {
             final int pos = i;
             String cat = pos < categories.size() ? categories.get(pos) : "";
@@ -266,6 +279,7 @@ public class LiveTvActivity extends Activity {
             row.setFocusableInTouchMode(true);
             row.setClickable(true);
             row.setBackground(rowBg(i == channelIndex, false));
+
             row.setOnClickListener(v -> showChannel(pos, true));
             row.setOnFocusChangeListener((v, focused) -> {
                 boolean selected = pos == channelIndex;
@@ -273,9 +287,50 @@ public class LiveTvActivity extends Activity {
                 ((TextView) v).setTypeface(Typeface.DEFAULT, (focused || selected) ? Typeface.BOLD : Typeface.NORMAL);
                 if (focused && listWrap != null) listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, v.getTop() - 120)));
             });
+            row.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    focusChannelRow(pos - 1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    focusChannelRow(pos + 1);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    if (playerCard != null) playerCard.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                    showChannel(pos, true);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_MEDIA_NEXT) {
+                    changeChannel(1, true);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+                    changeChannel(-1, true);
+                    return true;
+                }
+                return false;
+            });
+
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 54);
             lp.setMargins(0, 3, 0, 3);
             channelList.addView(row, lp);
+
+            if (first == null) first = row;
+            if (previous != null) {
+                previous.setNextFocusDownId(row.getId());
+                row.setNextFocusUpId(previous.getId());
+            }
+            previous = row;
+        }
+
+        if (first != null && previous != null) {
+            first.setNextFocusUpId(previous.getId());
+            previous.setNextFocusDownId(first.getId());
         }
     }
 
@@ -292,6 +347,35 @@ public class LiveTvActivity extends Activity {
             return true;
         }
 
+        View focus = getCurrentFocus();
+        int focusedIndex = indexOfFocusedChannel(focus);
+
+        if (focusedIndex >= 0) {
+            if (k == KeyEvent.KEYCODE_DPAD_UP) {
+                focusChannelRow(focusedIndex - 1);
+                return true;
+            }
+            if (k == KeyEvent.KEYCODE_DPAD_DOWN) {
+                focusChannelRow(focusedIndex + 1);
+                return true;
+            }
+            if (k == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (playerCard != null) playerCard.requestFocus();
+                return true;
+            }
+            if (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER || k == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                showChannel(focusedIndex, true);
+                return true;
+            }
+        }
+
+        if (focus == playerCard) {
+            if (k == KeyEvent.KEYCODE_DPAD_RIGHT || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) {
+                focusCurrentRow();
+                return true;
+            }
+        }
+
         if (k == KeyEvent.KEYCODE_CHANNEL_UP || k == KeyEvent.KEYCODE_MEDIA_NEXT) {
             changeChannel(1, true);
             return true;
@@ -301,27 +385,26 @@ public class LiveTvActivity extends Activity {
             return true;
         }
 
-        View focus = getCurrentFocus();
-        boolean inList = focus != null && focus.getParent() == channelList;
-
-        if (k == KeyEvent.KEYCODE_DPAD_LEFT && inList) {
-            playerCard.requestFocus();
-            return true;
-        }
-        if (k == KeyEvent.KEYCODE_DPAD_RIGHT && focus == playerCard) {
-            focusCurrentRow();
-            return true;
-        }
-        if ((k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) && focus == playerCard) {
-            focusCurrentRow();
-            return true;
-        }
-        if ((k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) && inList) {
-            focus.performClick();
-            return true;
-        }
-
         return super.dispatchKeyEvent(e);
+    }
+
+    private int indexOfFocusedChannel(View focus) {
+        if (focus == null || channelList == null) return -1;
+        for (int i = 0; i < channelList.getChildCount(); i++) {
+            if (channelList.getChildAt(i) == focus) return i;
+        }
+        return -1;
+    }
+
+    private void focusChannelRow(int index) {
+        if (channelList == null || channelList.getChildCount() == 0) return;
+        int count = channelList.getChildCount();
+        int idx = ((index % count) + count) % count;
+        View row = channelList.getChildAt(idx);
+        if (row != null) {
+            row.requestFocus();
+            if (listWrap != null) listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, row.getTop() - 120)));
+        }
     }
 
     private void focusCurrentRow() {
@@ -329,12 +412,7 @@ public class LiveTvActivity extends Activity {
             if (playerCard != null) playerCard.requestFocus();
             return;
         }
-        int idx = Math.max(0, Math.min(channelIndex, channelList.getChildCount() - 1));
-        View row = channelList.getChildAt(idx);
-        if (row != null) {
-            row.requestFocus();
-            if (listWrap != null) listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, row.getTop() - 120)));
-        }
+        focusChannelRow(channelIndex);
     }
 
     private void changeChannel(int delta, boolean focusRow) {
@@ -363,7 +441,7 @@ public class LiveTvActivity extends Activity {
     }
 
     private void playSelected() {
-        if (player == null) return;
+        if (player == null || playbackStatus == null) return;
         String u = channelIndex < streamUrls.size() ? streamUrls.get(channelIndex) : "";
         if (u == null || u.trim().isEmpty()) {
             player.stop();
