@@ -59,6 +59,11 @@ jobs:
           s = s.replace(old, new)
           s = s.replace('        projection!!.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n', '        activeProjection.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n')
           mirror.write_text(s)
+          tvserver = root / 'tv/src/main/java/com/ozdemir/remote/tv/RemoteServerService.kt'
+          s = tvserver.read_text()
+          if 'import com.ozdemir.remote.core.RemoteAction\n' not in s:
+              s = s.replace('import com.ozdemir.remote.core.*\n', 'import com.ozdemir.remote.core.*\nimport com.ozdemir.remote.core.RemoteAction\n')
+          tvserver.write_text(s)
           PY
 
       - name: Build phone and TV APKs
