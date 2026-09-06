@@ -10,7 +10,6 @@ import android.os.Handler;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -67,8 +66,7 @@ public class MainActivity extends Activity {
         stage = new FrameLayout(this);
         stage.setClipChildren(false);
         stage.setClipToPadding(false);
-        FrameLayout.LayoutParams stageParams = new FrameLayout.LayoutParams(DESIGN_W, DESIGN_H);
-        outer.addView(stage, stageParams);
+        outer.addView(stage, new FrameLayout.LayoutParams(DESIGN_W, DESIGN_H));
 
         ImageView artwork = new ImageView(this);
         artwork.setImageResource(R.drawable.home_figma);
@@ -96,70 +94,70 @@ public class MainActivity extends Activity {
     }
 
     private void addHeroZones() {
-        firstFocus = addFocusZone(88, 180, 370, 300, this::openLiveTv);
-        addFocusZone(514, 180, 370, 300, this::openFilms);
-        addFocusZone(940, 180, 370, 300, this::openFiles);
-        addFocusZone(1366, 180, 370, 300, this::openKids);
+        firstFocus = addFocusZone(70, 214, 410, 300, this::openLiveTv);
+        addFocusZone(508, 214, 410, 300, this::openFilms);
+        addFocusZone(946, 214, 410, 300, this::openFiles);
+        addFocusZone(1384, 214, 410, 300, this::openKids);
     }
 
     private void addAppZones() {
-        int[] x = {96, 346, 596, 846, 1096, 1346, 1596};
+        int[] x = {70, 318, 566, 814, 1062, 1310, 1558};
         Runnable[] actions = {
                 () -> launch(new String[]{"com.google.android.youtube.tv", "com.google.android.youtube"}),
                 () -> launch(new String[]{"com.netflix.ninja"}),
-                this::openLiveTv,
-                this::openFilms,
-                this::openKids,
-                this::openFiles,
+                () -> launch(new String[]{"com.amazon.amazonvideo.livingroom", "com.amazon.avod.thirdpartyclient"}),
+                () -> launch(new String[]{"com.disney.disneyplus", "com.disney.disneyplus.tv"}),
+                () -> launch(new String[]{"com.spotify.tv.android", "com.spotify.music"}),
+                () -> launch(new String[]{"com.android.chrome", "com.android.browser"}),
                 this::openApps
         };
-        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 512, 228, 154, actions[i]);
+        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 558, 226, 142, actions[i]);
     }
 
     private void addUtilityZones() {
-        int[] x = {96,255,414,573,732,891,1050,1209,1368,1527,1686};
+        int[] x = {70,232,394,556,718,880,1042,1204,1366,1528,1690};
         Runnable[] actions = {
-                () -> {},
-                () -> openAndroid(Settings.ACTION_DISPLAY_SETTINGS),
-                this::openFiles,
-                this::openFiles,
-                this::openApps,
-                () -> openAndroid(Settings.ACTION_SOUND_SETTINGS),
+                () -> openAndroid(Settings.ACTION_WIFI_SETTINGS),
                 () -> openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS),
-                () -> openPanel("network"),
+                () -> openAndroid("android.settings.CAST_SETTINGS"),
+                () -> openAndroid("android.settings.HDMI_SETTINGS"),
+                () -> openAndroid(Settings.ACTION_SOUND_SETTINGS),
                 () -> openAndroid(Settings.ACTION_DISPLAY_SETTINGS),
+                this::openFiles,
+                this::openKids,
                 () -> openPanel("theme"),
+                () -> openPanel("settings"),
                 () -> openPanel("power")
         };
-        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 720, 138, 130, actions[i]);
+        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 746, 145, 118, actions[i]);
     }
 
     private void addStatusZones() {
-        addFocusZone(1396, 28, 52, 64, () -> openPanel("network"));
-        addFocusZone(1452, 28, 52, 64, () -> openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS));
-        addFocusZone(1508, 28, 52, 64, () -> openAndroid("android.settings.CAST_SETTINGS"));
-        addFocusZone(1564, 28, 66, 64, () -> openPanel("settings"));
+        addFocusZone(1340, 34, 54, 54, () -> openAndroid(Settings.ACTION_WIFI_SETTINGS));
+        addFocusZone(1396, 34, 54, 54, () -> openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS));
+        addFocusZone(1452, 34, 54, 54, () -> openAndroid("android.settings.CAST_SETTINGS"));
     }
 
     private void addLiveClock() {
         View cover = new View(this);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xD9050409);
-        bg.setCornerRadius(18f);
-        place(cover, 1656, 20, 172, 80);
+        bg.setColor(0xE30A0810);
+        bg.setCornerRadius(26f);
+        cover.setBackground(bg);
+        place(cover, 1584, 20, 246, 84);
 
         clock = new TextView(this);
         clock.setTextColor(Color.WHITE);
-        clock.setTextSize(40f);
+        clock.setTextSize(34f);
         clock.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         clock.setGravity(Gravity.LEFT | Gravity.TOP);
-        place(clock, 1664, 24, 150, 48);
+        place(clock, 1602, 31, 160, 44);
 
         date = new TextView(this);
         date.setTextColor(0xB8EBE5F5);
-        date.setTextSize(13f);
+        date.setTextSize(12f);
         date.setGravity(Gravity.LEFT | Gravity.TOP);
-        place(date, 1664, 68, 160, 24);
+        place(date, 1604, 68, 210, 22);
     }
 
     private View addFocusZone(int x, int y, int w, int h, Runnable action) {
@@ -169,11 +167,8 @@ public class MainActivity extends Activity {
         zone.setBackground(clearDrawable());
         zone.setOnClickListener(v -> action.run());
         zone.setOnFocusChangeListener((v, focused) -> {
-            v.animate()
-                    .scaleX(focused ? 1.025f : 1f)
-                    .scaleY(focused ? 1.025f : 1f)
-                    .setDuration(focused ? 180 : 150)
-                    .start();
+            v.animate().scaleX(focused ? 1.025f : 1f).scaleY(focused ? 1.025f : 1f)
+                    .setDuration(focused ? 180 : 150).start();
             v.setElevation(focused ? 22f : 0f);
             v.setBackground(focused ? focusDrawable() : clearDrawable());
         });
@@ -190,9 +185,9 @@ public class MainActivity extends Activity {
 
     private GradientDrawable focusDrawable() {
         GradientDrawable d = new GradientDrawable();
-        d.setColor(0x12000000);
+        d.setColor(0x10000000);
         d.setCornerRadius(28f);
-        d.setStroke(3, 0xFFF5EBFF);
+        d.setStroke(3, 0xFFE9D9FF);
         return d;
     }
 
