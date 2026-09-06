@@ -2,32 +2,50 @@ package com.ozdemir.tvlauncher;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.widget.Toast;
 
 /**
  * Thin bridge for an optional, locally installed content provider.
  * The provider identity stays out of OS-facing UI; this class only launches
- * the provider's exported launcher activity. No stream extraction, scraping,
- * DRM bypass or internal/non-exported activity access is performed here.
+ * the provider's exported TV/launcher activity. No stream extraction,
+ * scraping, DRM bypass or internal/non-exported activity access is performed.
  */
 public final class ContentProviderBridge {
     private static final String PROVIDER_PACKAGE = "com.bp.box";
 
     private ContentProviderBridge() {}
 
-    public static boolean isInstalled(Activity activity) {
+    private static Intent resolveLaunchIntent(Activity activity) {
         try {
-            return activity.getPackageManager().getLaunchIntentForPackage(PROVIDER_PACKAGE) != null;
+            PackageManager pm = activity.getPackageManager();
+
+            // Prefer the Android TV / Leanback entry point when the provider exposes one.
+            Intent launch = pm.getLeanbackLaunchIntentForPackage(PROVIDER_PACKAGE);
+            if (launch == null) {
+                launch = pm.getLaunchIntentForPackage(PROVIDER_PACKAGE);
+            }
+
+            if (launch != null) {
+                launch.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK |
+                        Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED |
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            }
+            return launch;
         } catch (Exception ignored) {
-            return false;
+            return null;
         }
+    }
+
+    public static boolean isInstalled(Activity activity) {
+        return resolveLaunchIntent(activity) != null;
     }
 
     public static boolean launch(Activity activity) {
         try {
-            Intent launch = activity.getPackageManager().getLaunchIntentForPackage(PROVIDER_PACKAGE);
+            Intent launch = resolveLaunchIntent(activity);
             if (launch == null) return false;
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             activity.startActivity(launch);
             return true;
         } catch (Exception ignored) {
