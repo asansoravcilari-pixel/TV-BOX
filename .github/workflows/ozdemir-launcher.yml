@@ -1,8 +1,8 @@
-name: Build OZDEMIR TV OS Launcher
+name: Build Restored OS APPELE TV Launcher
 
 on:
   push:
-    branches: [ main ]
+    branches: [ restore-appletv-launcher ]
     paths:
       - 'ozdemir-launcher/**'
       - '.github/workflows/ozdemir-launcher.yml'
@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+
+actions:
 
 jobs:
   build:
@@ -33,13 +35,16 @@ jobs:
         working-directory: ozdemir-launcher
         run: gradle --no-daemon assembleDebug
 
-      - name: Publish APK to repo
+      - name: Stage APK
         run: |
           mkdir -p dist
-          cp ozdemir-launcher/app/build/outputs/apk/debug/app-debug.apk dist/OZDEMIR-TV-OS-Launcher.apk
-          sha256sum dist/OZDEMIR-TV-OS-Launcher.apk > dist/OZDEMIR-TV-OS-Launcher.sha256
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add dist/OZDEMIR-TV-OS-Launcher.apk dist/OZDEMIR-TV-OS-Launcher.sha256
-          git diff --cached --quiet || git commit -m 'Build OZDEMIR TV OS launcher APK'
-          git push
+          cp ozdemir-launcher/app/build/outputs/apk/debug/app-debug.apk dist/OS-APPELE-TV-RESTORED.apk
+          sha256sum dist/OS-APPELE-TV-RESTORED.apk > dist/OS-APPELE-TV-RESTORED.sha256
+
+      - name: Upload restored APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OS-APPELE-TV-RESTORED
+          path: |
+            dist/OS-APPELE-TV-RESTORED.apk
+            dist/OS-APPELE-TV-RESTORED.sha256
