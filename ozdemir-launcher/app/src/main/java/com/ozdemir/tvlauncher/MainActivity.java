@@ -1,59 +1,241 @@
 package com.ozdemir.tvlauncher;
 
 import android.app.Activity;
-import android.content.*;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.*;
-import android.os.*;
+import android.os.Bundle;
+import android.os.Handler;
 import android.provider.Settings;
-import android.view.*;
-import android.widget.*;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.TextView;
+
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
- private final Handler handler=new Handler(); private TextView clock,date,wifi; private LinearLayout root;
- @Override public void onCreate(Bundle b){super.onCreate(b);requestWindowFeature(Window.FEATURE_NO_TITLE);getWindow().setFlags(1024,1024);hide();setContentView(build());tick();}
- @Override public void onWindowFocusChanged(boolean f){super.onWindowFocusChanged(f);if(f)hide();}
- private void hide(){getWindow().getDecorView().setSystemUiVisibility(5894|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);}
- private View build(){
-  root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(38),dp(22),dp(38),dp(24));root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xFF080410,0xFF21102E,0xFF08040D}));
-  LinearLayout top=row(); View space=new View(this);top.addView(space,new LinearLayout.LayoutParams(0,1,1));
-  wifi=topChip("⌁");top.addView(wifi,chip());top.addView(topChip("ᛒ"),chip());TextView cast=topChip("▣");cast.setOnClickListener(v->openPanel("settings"));top.addView(cast,chip());
-  LinearLayout tm=new LinearLayout(this);tm.setOrientation(LinearLayout.VERTICAL);tm.setGravity(Gravity.RIGHT);clock=txt("--:--",30,true);clock.setGravity(Gravity.RIGHT);date=txt("",11,false);date.setTextColor(0xFFBCAFC5);date.setGravity(Gravity.RIGHT);tm.addView(clock);tm.addView(date);LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(dp(155),dp(68));tp.setMargins(dp(16),0,0,0);top.addView(tm,tp);root.addView(top,new LinearLayout.LayoutParams(-1,dp(72)));
+    private static final int DESIGN_W = 1920;
+    private static final int DESIGN_H = 1080;
+    private final Handler handler = new Handler();
+    private FrameLayout stage;
+    private TextView clock;
+    private TextView date;
+    private View firstFocus;
 
-  LinearLayout hero=row();
-  hero.addView(card("▣","Canlı TV",this::live,0),weight(7));hero.addView(card("▶","Dizi & Film",this::films,1),weight(7));hero.addView(card("▧","Medya",this::files,2),weight(7));hero.addView(card("☺","Çocuklar",this::kids,3),weight(7));root.addView(hero,new LinearLayout.LayoutParams(-1,0,2.15f));
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(1024, 1024);
+        hideSystemUi();
+        setContentView(buildHome());
+        tickClock();
+    }
 
-  LinearLayout apps=row();
-  apps.addView(appCard("▶","SmartTube",()->launch(new String[]{"com.liskovsoft.smarttubetv.beta","org.smarttuber.stable"})),weight(6));
-  apps.addView(appCard("●","YouTube",()->launch(new String[]{"com.google.android.youtube.tv","com.google.android.youtube"})),weight(6));
-  apps.addView(appCard("★","TRT Çocuk",this::kids),weight(6));
-  apps.addView(appCard("◆","tabii",this::films),weight(6));
-  apps.addView(appCard("+","Uygulamalar",this::apps),weight(6));root.addView(apps,new LinearLayout.LayoutParams(-1,0,1.08f));
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemUi();
+    }
 
-  LinearLayout sys=row();
-  sys.addView(sys("⌁","Wi‑Fi",()->panel("network")),weight(5));sys.addView(sys("ᛒ","Bluetooth",()->openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS)),weight(5));sys.addView(sys("▣","Yansıt",()->openAndroid("android.settings.CAST_SETTINGS")),weight(5));sys.addView(sys("USB","USB",this::files),weight(5));sys.addView(sys("▤","Dosya",this::files),weight(5));sys.addView(sys("▧","Galeri",this::files),weight(5));sys.addView(sys("✦","Tema",()->panel("theme")),weight(5));sys.addView(sys("◷","Sayaç",()->panel("timer")),weight(5));sys.addView(sys("⚙","Ayar",()->panel("settings")),weight(5));sys.addView(sys("⏻","Güç",()->panel("power")),weight(5));root.addView(sys,new LinearLayout.LayoutParams(-1,0,.92f));
-  hero.getChildAt(0).requestFocus();return root;
- }
- private TextView topChip(String s){TextView v=txt(s,23,true);v.setGravity(Gravity.CENTER);v.setFocusable(true);v.setBackground(bg(0xA52B173A,0xA5160C20,false,16));focus(v);return v;}
- private LinearLayout.LayoutParams chip(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(58),dp(52));p.setMargins(dp(5),0,dp(5),0);return p;}
- private View card(String icon,String title,Runnable r,int style){LinearLayout b=box();b.setPadding(dp(20),dp(18),dp(20),dp(15));TextView i=txt(icon,48,true);i.setGravity(Gravity.CENTER);b.addView(i,new LinearLayout.LayoutParams(-1,0,1));TextView t=txt(title,18,true);t.setGravity(Gravity.CENTER);b.addView(t);int[][] c={{0xDD2A1050,0xCC0D1837},{0xDD421343,0xCC16102E},{0xDD172C54,0xCC151027},{0xDD452046,0xCC17102B}};b.setBackground(bg(c[style][0],c[style][1],false,24));clickFocus(b,r,c[style]);return b;}
- private View appCard(String icon,String title,Runnable r){LinearLayout b=box();TextView i=txt(icon,27,true);i.setGravity(Gravity.CENTER);b.addView(i,new LinearLayout.LayoutParams(-1,0,1));TextView t=txt(title,12,true);t.setGravity(Gravity.CENTER);b.addView(t);int[] c={0xC5251532,0xB7110A19};b.setBackground(bg(c[0],c[1],false,20));clickFocus(b,r,c);return b;}
- private View sys(String icon,String title,Runnable r){LinearLayout b=box();TextView i=txt(icon,20,true);i.setGravity(Gravity.CENTER);b.addView(i,new LinearLayout.LayoutParams(-1,0,1));TextView t=txt(title,10,true);t.setGravity(Gravity.CENTER);t.setTextColor(0xFFE4D8E9);b.addView(t);int[] c={0xB6251731,0xA5110A18};b.setBackground(bg(c[0],c[1],false,17));clickFocus(b,r,c);return b;}
- private LinearLayout box(){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);b.setGravity(Gravity.CENTER);b.setPadding(dp(10),dp(10),dp(10),dp(9));b.setFocusable(true);b.setClickable(true);b.setElevation(dp(3));return b;}
- private void clickFocus(View v,Runnable r,int[] c){v.setOnClickListener(x->r.run());v.setOnFocusChangeListener((x,f)->{x.animate().scaleX(f?1.065f:1).scaleY(f?1.065f:1).translationY(f?-dp(3):0).setDuration(120).start();x.setElevation(f?dp(18):dp(3));x.setBackground(f?bg(0xEE8D2DD2,0xEE40176E,true,22):bg(c[0],c[1],false,22));});}
- private void focus(View v){v.setOnFocusChangeListener((x,f)->{x.animate().scaleX(f?1.08f:1).scaleY(f?1.08f:1).setDuration(100).start();});}
- private GradientDrawable bg(int a,int b,boolean focus,int rad){GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{a,b});d.setCornerRadius(dp(rad));d.setStroke(dp(focus?2:1),focus?0xFFFFE8FF:0x554F345C);return d;}
- private LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.HORIZONTAL);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
- private LinearLayout.LayoutParams weight(int m){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(m),dp(m),dp(m),dp(m));return p;}
- private TextView txt(String s,int size,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(Color.WHITE);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
- private void tick(){handler.post(new Runnable(){public void run(){Date n=new Date();clock.setText(new SimpleDateFormat("HH:mm",new Locale("tr","TR")).format(n));date.setText(new SimpleDateFormat("d MMMM • EEEE",new Locale("tr","TR")).format(n));updateWifi();handler.postDelayed(this,15000);}});}
- private void updateWifi(){boolean ok=false;try{ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);Network n=cm.getActiveNetwork();NetworkCapabilities c=n==null?null:cm.getNetworkCapabilities(n);ok=c!=null&&c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);}catch(Exception ignored){}wifi.setText(ok?"⌁":"×");}
- private void live(){startActivity(new Intent(this,LiveTvActivity.class));}private void films(){startActivity(new Intent(this,DiziFilmActivity.class));}private void kids(){startActivity(new Intent(this,KidsActivity.class));}private void files(){startActivity(new Intent(this,FilesActivity.class));}private void apps(){startActivity(new Intent(this,AppsActivity.class));}
- private void panel(String p){Intent i=new Intent(this,SettingsPanelActivity.class);i.putExtra("page",p);startActivity(i);}private void openPanel(String p){panel(p);}private void openAndroid(String a){try{startActivity(new Intent(a));}catch(Exception e){panel("settings");}}
- private void launch(String[] pkgs){for(String p:pkgs){Intent i=getPackageManager().getLaunchIntentForPackage(p);if(i!=null){startActivity(i);return;}}apps();}
- private int dp(int x){return Math.round(x*getResources().getDisplayMetrics().density);}
+    @Override protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
+    private void hideSystemUi() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+    }
+
+    private View buildHome() {
+        FrameLayout outer = new FrameLayout(this);
+        outer.setBackgroundColor(Color.BLACK);
+        outer.setClipChildren(false);
+        outer.setClipToPadding(false);
+
+        stage = new FrameLayout(this);
+        stage.setClipChildren(false);
+        stage.setClipToPadding(false);
+        FrameLayout.LayoutParams stageParams = new FrameLayout.LayoutParams(DESIGN_W, DESIGN_H);
+        outer.addView(stage, stageParams);
+
+        ImageView artwork = new ImageView(this);
+        artwork.setImageResource(R.drawable.home_figma);
+        artwork.setScaleType(ImageView.ScaleType.FIT_XY);
+        stage.addView(artwork, new FrameLayout.LayoutParams(DESIGN_W, DESIGN_H));
+
+        addHeroZones();
+        addAppZones();
+        addUtilityZones();
+        addStatusZones();
+        addLiveClock();
+
+        outer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
+            float scale = Math.min((r - l) / (float) DESIGN_W, (b - t) / (float) DESIGN_H);
+            stage.setPivotX(0f);
+            stage.setPivotY(0f);
+            stage.setScaleX(scale);
+            stage.setScaleY(scale);
+            stage.setX(((r - l) - DESIGN_W * scale) / 2f);
+            stage.setY(((b - t) - DESIGN_H * scale) / 2f);
+        });
+
+        outer.post(() -> { if (firstFocus != null) firstFocus.requestFocus(); });
+        return outer;
+    }
+
+    private void addHeroZones() {
+        firstFocus = addFocusZone(88, 180, 370, 300, this::openLiveTv);
+        addFocusZone(514, 180, 370, 300, this::openFilms);
+        addFocusZone(940, 180, 370, 300, this::openFiles);
+        addFocusZone(1366, 180, 370, 300, this::openKids);
+    }
+
+    private void addAppZones() {
+        int[] x = {96, 346, 596, 846, 1096, 1346, 1596};
+        Runnable[] actions = {
+                () -> launch(new String[]{"com.google.android.youtube.tv", "com.google.android.youtube"}),
+                () -> launch(new String[]{"com.netflix.ninja"}),
+                this::openLiveTv,
+                this::openFilms,
+                this::openKids,
+                this::openFiles,
+                this::openApps
+        };
+        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 512, 228, 154, actions[i]);
+    }
+
+    private void addUtilityZones() {
+        int[] x = {96,255,414,573,732,891,1050,1209,1368,1527,1686};
+        Runnable[] actions = {
+                () -> {},
+                () -> openAndroid(Settings.ACTION_DISPLAY_SETTINGS),
+                this::openFiles,
+                this::openFiles,
+                this::openApps,
+                () -> openAndroid(Settings.ACTION_SOUND_SETTINGS),
+                () -> openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS),
+                () -> openPanel("network"),
+                () -> openAndroid(Settings.ACTION_DISPLAY_SETTINGS),
+                () -> openPanel("theme"),
+                () -> openPanel("power")
+        };
+        for (int i = 0; i < x.length; i++) addFocusZone(x[i], 720, 138, 130, actions[i]);
+    }
+
+    private void addStatusZones() {
+        addFocusZone(1396, 28, 52, 64, () -> openPanel("network"));
+        addFocusZone(1452, 28, 52, 64, () -> openAndroid(Settings.ACTION_BLUETOOTH_SETTINGS));
+        addFocusZone(1508, 28, 52, 64, () -> openAndroid("android.settings.CAST_SETTINGS"));
+        addFocusZone(1564, 28, 66, 64, () -> openPanel("settings"));
+    }
+
+    private void addLiveClock() {
+        View cover = new View(this);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xD9050409);
+        bg.setCornerRadius(18f);
+        place(cover, 1656, 20, 172, 80);
+
+        clock = new TextView(this);
+        clock.setTextColor(Color.WHITE);
+        clock.setTextSize(40f);
+        clock.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        clock.setGravity(Gravity.LEFT | Gravity.TOP);
+        place(clock, 1664, 24, 150, 48);
+
+        date = new TextView(this);
+        date.setTextColor(0xB8EBE5F5);
+        date.setTextSize(13f);
+        date.setGravity(Gravity.LEFT | Gravity.TOP);
+        place(date, 1664, 68, 160, 24);
+    }
+
+    private View addFocusZone(int x, int y, int w, int h, Runnable action) {
+        View zone = new View(this);
+        zone.setFocusable(true);
+        zone.setClickable(true);
+        zone.setBackground(clearDrawable());
+        zone.setOnClickListener(v -> action.run());
+        zone.setOnFocusChangeListener((v, focused) -> {
+            v.animate()
+                    .scaleX(focused ? 1.025f : 1f)
+                    .scaleY(focused ? 1.025f : 1f)
+                    .setDuration(focused ? 180 : 150)
+                    .start();
+            v.setElevation(focused ? 22f : 0f);
+            v.setBackground(focused ? focusDrawable() : clearDrawable());
+        });
+        place(zone, x, y, w, h);
+        return zone;
+    }
+
+    private GradientDrawable clearDrawable() {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(Color.TRANSPARENT);
+        d.setCornerRadius(24f);
+        return d;
+    }
+
+    private GradientDrawable focusDrawable() {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(0x12000000);
+        d.setCornerRadius(28f);
+        d.setStroke(3, 0xFFF5EBFF);
+        return d;
+    }
+
+    private void place(View v, int x, int y, int w, int h) {
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(w, h);
+        p.leftMargin = x;
+        p.topMargin = y;
+        stage.addView(v, p);
+    }
+
+    private void tickClock() {
+        handler.post(new Runnable() {
+            @Override public void run() {
+                Date now = new Date();
+                if (clock != null) clock.setText(new SimpleDateFormat("HH:mm", new Locale("tr", "TR")).format(now));
+                if (date != null) date.setText(new SimpleDateFormat("d MMMM · EEEE", new Locale("tr", "TR")).format(now));
+                handler.postDelayed(this, 15000);
+            }
+        });
+    }
+
+    private void openLiveTv() { startActivity(new Intent(this, LiveTvActivity.class)); }
+    private void openFilms() { startActivity(new Intent(this, DiziFilmActivity.class)); }
+    private void openKids() { startActivity(new Intent(this, KidsActivity.class)); }
+    private void openFiles() { startActivity(new Intent(this, FilesActivity.class)); }
+    private void openApps() { startActivity(new Intent(this, AppsActivity.class)); }
+
+    private void openPanel(String page) {
+        Intent i = new Intent(this, SettingsPanelActivity.class);
+        i.putExtra("page", page);
+        startActivity(i);
+    }
+
+    private void openAndroid(String action) {
+        try { startActivity(new Intent(action)); }
+        catch (Exception ignored) { openPanel("settings"); }
+    }
+
+    private void launch(String[] packages) {
+        for (String pkg : packages) {
+            Intent i = getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i != null) { startActivity(i); return; }
+        }
+        openApps();
+    }
 }
