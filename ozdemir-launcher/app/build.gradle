@@ -20,8 +20,8 @@ android {
         }
         preview {
             initWith debug
-            applicationIdSuffix '.preview'
-            versionNameSuffix '-preview'
+            applicationIdSuffix '.figma'
+            versionNameSuffix '-figma'
             debuggable true
             matchingFallbacks = ['debug']
         }
