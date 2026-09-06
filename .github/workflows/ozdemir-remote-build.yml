@@ -1,8 +1,10 @@
-name: Build Ozdemir Remote APKs
+name: Build Ozdemir Remote APKs v1.2.0
 
 on:
   push:
-    branches: [ main, ozremote-v1.2.0-finalprod ]
+    branches:
+      - main
+      - ozremote-v1.2.0-finalprod
     paths:
       - 'OzdemirRemote/**'
       - '.github/workflows/ozdemir-remote-build.yml'
@@ -27,12 +29,12 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Setup Gradle
+      - name: Setup Gradle 9.5.0
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
 
-      - name: Reconstruct exact v1.2 Figma source
+      - name: Reconstruct and verify v1.2 source
         shell: bash
         run: |
           set -euo pipefail
@@ -45,69 +47,96 @@ jobs:
             OzdemirRemote/v1.2-full/part04.b64 \
             OzdemirRemote/v1.2-full/part05.b64 \
             | base64 -d > "$RUNNER_TEMP/OzdemirRemote-source.zip"
-          echo "a39bbd1113d27da53c983e81d47d58718ffaf2c157210ac1a2c6478fbd7c94c1  $RUNNER_TEMP/OzdemirRemote-source.zip" | sha256sum -c -
+
+          EXPECTED_SHA="a39bbd1113d27da53c983e81d47d58718ffaf2c157210ac1a2c6478fbd7c94c1"
+          ACTUAL_SHA="$(sha256sum "$RUNNER_TEMP/OzdemirRemote-source.zip" | awk '{print $1}')"
+          echo "source sha256=$ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+
+          unzip -t "$RUNNER_TEMP/OzdemirRemote-source.zip"
           unzip -q "$RUNNER_TEMP/OzdemirRemote-source.zip" -d "$RUNNER_TEMP/ozremote"
+
           ROOT="$RUNNER_TEMP/ozremote/OzdemirRemote"
           test -f "$ROOT/settings.gradle.kts"
+          test -f "$ROOT/phone/build.gradle.kts"
+          test -f "$ROOT/tv/build.gradle.kts"
           grep -q 'versionName = "1.2.0"' "$ROOT/phone/build.gradle.kts"
           grep -q 'versionName = "1.2.0"' "$ROOT/tv/build.gradle.kts"
 
-          sed -i 's/compileSdk = 37/compileSdk = 36/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts" "$ROOT/core/build.gradle.kts"
-          sed -i 's/compose-bom:2026.08.00/compose-bom:2026.06.00/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
-          sed -i 's/activity-compose:1.13.0/activity-compose:1.12.2/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
+          sed -i 's/compileSdk = 37/compileSdk = 36/g' \
+            "$ROOT/phone/build.gradle.kts" \
+            "$ROOT/tv/build.gradle.kts" \
+            "$ROOT/core/build.gradle.kts"
+          sed -i 's/compose-bom:2026.08.00/compose-bom:2026.06.00/g' \
+            "$ROOT/phone/build.gradle.kts" \
+            "$ROOT/tv/build.gradle.kts"
+          sed -i 's/activity-compose:1.13.0/activity-compose:1.12.2/g' \
+            "$ROOT/phone/build.gradle.kts" \
+            "$ROOT/tv/build.gradle.kts"
 
           python3 - <<'PY'
           import os
           from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'ozremote' / 'OzdemirRemote'
 
-          main = root / 'phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt'
+          root = Path(os.environ["RUNNER_TEMP"]) / "ozremote" / "OzdemirRemote"
+
+          main = root / "phone/src/main/java/com/ozdemir/remote/phone/MainActivity.kt"
           s = main.read_text()
-          if 'import androidx.activity.compose.setContent\n' not in s:
-              s = s.replace('import androidx.activity.ComponentActivity\n', 'import androidx.activity.ComponentActivity\nimport androidx.activity.compose.setContent\n')
+          required = "import androidx.activity.compose.setContent\n"
+          anchor = "import androidx.activity.ComponentActivity\n"
+          if required not in s and anchor in s:
+              s = s.replace(anchor, anchor + required)
           main.write_text(s)
 
-          mirror = root / 'phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt'
+          mirror = root / "phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt"
           s = mirror.read_text()
-          old = '''        projection = mgr.getMediaProjection(resultCode, data).also { p ->
-            p.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)
-        }
-'''
-          new = '''        val activeProjection = mgr.getMediaProjection(resultCode, data) ?: run {
-            running = false
-            stopSelf()
-            return
-        }
-        activeProjection.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)
-        projection = activeProjection
-'''
+          old = (
+              "        projection = mgr.getMediaProjection(resultCode, data).also { p ->\n"
+              "            p.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)\n"
+              "        }\n"
+          )
+          new = (
+              "        val activeProjection = mgr.getMediaProjection(resultCode, data) ?: run {\n"
+              "            running = false\n"
+              "            stopSelf()\n"
+              "            return\n"
+              "        }\n"
+              "        activeProjection.registerCallback(object : MediaProjection.Callback() { override fun onStop() { stopSelf() } }, null)\n"
+              "        projection = activeProjection\n"
+          )
           if old in s:
               s = s.replace(old, new)
-          s = s.replace('        projection!!.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n', '        activeProjection.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,\n')
+          s = s.replace(
+              "        projection!!.createVirtualDisplay(\"OzdemirMirror\", width, height, resources.displayMetrics.densityDpi,\n",
+              "        activeProjection.createVirtualDisplay(\"OzdemirMirror\", width, height, resources.displayMetrics.densityDpi,\n",
+          )
           mirror.write_text(s)
 
-          tvserver = root / 'tv/src/main/java/com/ozdemir/remote/tv/RemoteServerService.kt'
+          tvserver = root / "tv/src/main/java/com/ozdemir/remote/tv/RemoteServerService.kt"
           s = tvserver.read_text()
-          if 'import com.ozdemir.remote.core.RemoteAction\n' not in s:
-              s = s.replace('import com.ozdemir.remote.core.*\n', 'import com.ozdemir.remote.core.*\nimport com.ozdemir.remote.core.RemoteAction\n')
+          explicit = "import com.ozdemir.remote.core.RemoteAction\n"
+          wildcard = "import com.ozdemir.remote.core.*\n"
+          if explicit not in s and wildcard in s:
+              s = s.replace(wildcard, wildcard + explicit)
           tvserver.write_text(s)
           PY
 
       - name: Build phone and TV APKs
         working-directory: ${{ runner.temp }}/ozremote/OzdemirRemote
-        run: gradle :phone:assembleDebug :tv:assembleDebug --stacktrace
+        run: gradle :phone:assembleDebug :tv:assembleDebug --stacktrace --no-daemon
 
       - name: Collect APKs and checksums
-        if: success()
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p out
-          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/phone/build/outputs/apk/debug/phone-debug.apk" out/Ozdemir-Remote-Phone-v1.2.0-debug.apk
-          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/tv/build/outputs/apk/debug/tv-debug.apk" out/Ozdemir-Receiver-TV-v1.2.0-debug.apk
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/phone/build/outputs/apk/debug/phone-debug.apk" \
+            out/Ozdemir-Remote-Phone-v1.2.0-debug.apk
+          cp "$RUNNER_TEMP/ozremote/OzdemirRemote/tv/build/outputs/apk/debug/tv-debug.apk" \
+            out/Ozdemir-Receiver-TV-v1.2.0-debug.apk
           (cd out && sha256sum *.apk > APK-SHA256.txt)
 
       - name: Upload APKs
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Ozdemir-Remote-APKs-v1.2.0-Figma
