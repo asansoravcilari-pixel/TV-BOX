@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'ozdemir-launcher/**'
+      - 'scripts/sync_figma_home_assets.sh'
       - '.github/workflows/ozdemir-launcher.yml'
   workflow_dispatch:
 
@@ -29,11 +30,14 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Sync approved Figma home artwork
+        run: bash scripts/sync_figma_home_assets.sh
+
       - name: Build APK
         working-directory: ozdemir-launcher
         run: gradle --no-daemon assembleDebug
 
-      - name: Publish APK to repo
+      - name: Publish APK and pinned Figma assets
         run: |
           mkdir -p dist
           cp ozdemir-launcher/app/build/outputs/apk/debug/app-debug.apk dist/OZDEMIR-TV-OS-Launcher.apk
@@ -41,5 +45,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/OZDEMIR-TV-OS-Launcher.apk dist/OZDEMIR-TV-OS-Launcher.sha256
-          git diff --cached --quiet || git commit -m 'Build OZDEMIR TV OS launcher APK'
+          git add ozdemir-launcher/app/src/main/res/drawable-nodpi/home_figma.png
+          git diff --cached --quiet || git commit -m 'Build OZDEMIR TV OS launcher APK and pin Figma home asset'
           git push
