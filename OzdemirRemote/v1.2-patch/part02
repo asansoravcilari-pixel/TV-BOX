@@ -1,0 +1,228 @@
++        Spacer(Modifier.height(8.dp))
++        Text(deviceName, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
++        Spacer(Modifier.height(5.dp))
++        Text(status, color = TextSecondary, fontSize = 11.sp, textAlign = TextAlign.Center)
++        Spacer(Modifier.height(22.dp))
++        Badge("ŞİFRELİ LAN", Success)
++    }
++}
++
++@Composable
++private fun DisconnectScreen(status: String, onReconnect: () -> Unit, onNewDevice: () -> Unit) {
++    Column(
++        Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp),
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.Center
++    ) {
++        Box(
++            Modifier.size(94.dp).clip(CircleShape)
++                .background(Danger.copy(alpha = 0.10f))
++                .border(1.dp, Danger.copy(alpha = 0.35f), CircleShape),
++            contentAlignment = Alignment.Center
++        ) { Text("×", color = Danger, fontSize = 46.sp, fontWeight = FontWeight.Light) }
++        Spacer(Modifier.height(25.dp))
++        Text("BAĞLANTI KESİLDİ", fontWeight = FontWeight.Black, fontSize = 21.sp, letterSpacing = 1.sp)
++        Spacer(Modifier.height(8.dp))
++        Text(status, color = TextSecondary, fontSize = 12.sp, textAlign = TextAlign.Center)
++        Spacer(Modifier.height(30.dp))
++        GradientButton("YENİDEN BAĞLAN", onClick = onReconnect)
++        Spacer(Modifier.height(10.dp))
++        SecondaryButton("BAŞKA TV SEÇ", Modifier.fillMaxWidth(), onNewDevice)
++    }
++}
++
++@Composable
+ private fun AmbientBackground() {
+     Box(Modifier.fillMaxSize()) {
+         Box(
+@@ -321,6 +442,7 @@
+     stored: Stored,
+     status: String,
+     onSend: (RemoteAction, String?, Float?, Float?) -> Unit,
++    onSetVolume: (Int) -> Unit,
+     onMirrorStart: () -> Unit,
+     onMirrorStop: () -> Unit,
+     onForget: () -> Unit
+@@ -364,7 +486,7 @@
+             Spacer(Modifier.height(12.dp))
+ 
+             when (tab) {
+-                RemoteTab.REMOTE -> RemotePanel(onSend)
++                RemoteTab.REMOTE -> RemotePanel(onSend, onSetVolume)
+                 RemoteTab.KEYBOARD -> KeyboardPanel(onSend)
+                 RemoteTab.TOUCHPAD -> TouchpadPanel(onSend)
+                 RemoteTab.MIRROR -> MirrorPanel(onMirrorStart, onMirrorStop)
+@@ -412,55 +534,120 @@
+ }
+ 
+ @Composable
+-private fun RemotePanel(onSend: (RemoteAction, String?, Float?, Float?) -> Unit) {
+-    Column(
+-        modifier = Modifier.fillMaxSize(),
+-        horizontalAlignment = Alignment.CenterHorizontally
+-    ) {
+-        Row(
+-            Modifier.fillMaxWidth(),
+-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+-        ) {
++private fun RemotePanel(
++    onSend: (RemoteAction, String?, Float?, Float?) -> Unit,
++    onSetVolume: (Int) -> Unit
++) {
++    var volumeLevel by remember { mutableStateOf(42f) }
++    var muted by remember { mutableStateOf(false) }
++
++    Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
++        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+             QuickKey("⏻", "Güç", Modifier.weight(1f)) { onSend(RemoteAction.POWER_MENU, null, null, null) }
+             QuickKey("⌂", "Home", Modifier.weight(1f)) { onSend(RemoteAction.HOME, null, null, null) }
+             QuickKey("←", "Geri", Modifier.weight(1f)) { onSend(RemoteAction.BACK, null, null, null) }
+             QuickKey("▦", "Son", Modifier.weight(1f)) { onSend(RemoteAction.RECENTS, null, null, null) }
+         }
+ 
+-        Spacer(Modifier.height(16.dp))
++        Spacer(Modifier.height(13.dp))
+         DPad(onSend)
+-        Spacer(Modifier.height(16.dp))
++        Spacer(Modifier.height(13.dp))
+ 
+-        GlassCard(padding = 10.dp) {
+-            Row(
+-                Modifier.fillMaxWidth(),
+-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+-            ) {
+-                Rocker(
+-                    title = "SES",
+-                    left = "−",
+-                    right = "+",
+-                    modifier = Modifier.weight(1f),
+-                    onLeft = { onSend(RemoteAction.VOL_DOWN, null, null, null) },
+-                    onRight = { onSend(RemoteAction.VOL_UP, null, null, null) }
+-                )
+-                ControlKey("SESSİZ", "MUTE", Modifier.weight(0.82f)) {
+-                    onSend(RemoteAction.MUTE, null, null, null)
+-                }
+-                ControlKey("MEDYA", "▶ ❚❚", Modifier.weight(0.82f)) {
+-                    onSend(RemoteAction.PLAY_PAUSE, null, null, null)
+-                }
++        SoundMediaPanel(
++            volumeLevel = volumeLevel,
++            muted = muted,
++            onVolumeChange = { volumeLevel = it },
++            onVolumeCommit = { onSetVolume(volumeLevel.toInt()) },
++            onVolumeDown = {
++                volumeLevel = (volumeLevel - 5f).coerceAtLeast(0f)
++                onSend(RemoteAction.VOL_DOWN, null, null, null)
++            },
++            onVolumeUp = {
++                volumeLevel = (volumeLevel + 5f).coerceAtMost(100f)
++                onSend(RemoteAction.VOL_UP, null, null, null)
++            },
++            onMute = {
++                muted = !muted
++                onSend(RemoteAction.MUTE, null, null, null)
++            },
++            onPrev = { onSend(RemoteAction.MEDIA_PREV, null, null, null) },
++            onPlayPause = { onSend(RemoteAction.PLAY_PAUSE, null, null, null) },
++            onNext = { onSend(RemoteAction.MEDIA_NEXT, null, null, null) }
++        )
++    }
++}
++
++@Composable
++private fun SoundMediaPanel(
++    volumeLevel: Float,
++    muted: Boolean,
++    onVolumeChange: (Float) -> Unit,
++    onVolumeCommit: () -> Unit,
++    onVolumeDown: () -> Unit,
++    onVolumeUp: () -> Unit,
++    onMute: () -> Unit,
++    onPrev: () -> Unit,
++    onPlayPause: () -> Unit,
++    onNext: () -> Unit
++) {
++    Column(
++        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
++            .background(Surface.copy(alpha = 0.92f))
++            .border(1.dp, Cyan.copy(alpha = 0.18f), RoundedCornerShape(22.dp))
++            .padding(15.dp)
++    ) {
++        Row(verticalAlignment = Alignment.CenterVertically) {
++            Column(Modifier.weight(1f)) {
++                Text("SES & MEDYA", fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 0.8.sp)
++                Text("Next My Box • aktif çıkış", color = TextSecondary, fontSize = 10.sp)
+             }
++            Text("${volumeLevel.toInt()}%", color = Cyan, fontWeight = FontWeight.Black, fontSize = 20.sp)
+         }
+-
+-        Spacer(Modifier.height(12.dp))
+-        Text(
+-            "D‑pad ve OK TV odağını kontrol eder. Ses ve medya komutları doğrudan Next My Box'a gider.",
+-            color = TextSecondary,
+-            fontSize = 11.sp,
+-            textAlign = TextAlign.Center,
+-            lineHeight = 16.sp
++        Spacer(Modifier.height(7.dp))
++        Slider(
++            value = volumeLevel,
++            onValueChange = onVolumeChange,
++            onValueChangeFinished = onVolumeCommit,
++            valueRange = 0f..100f,
++            colors = SliderDefaults.colors(
++                thumbColor = Cyan,
++                activeTrackColor = Cyan,
++                inactiveTrackColor = Color.White.copy(alpha = 0.10f)
++            )
+         )
++        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            SoundKey("−", "SES −", Modifier.weight(1f), onVolumeDown)
++            SoundKey(if (muted) "×" else "◉", if (muted) "SESSİZ" else "MUTE", Modifier.weight(1f), onMute, active = muted)
++            SoundKey("+", "SES +", Modifier.weight(1f), onVolumeUp)
++        }
++        Spacer(Modifier.height(9.dp))
++        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            SoundKey("|◀", "ÖNCEKİ", Modifier.weight(1f), onPrev)
++            SoundKey("▶ ❚❚", "OYNAT", Modifier.weight(1f), onPlayPause, prominent = true)
++            SoundKey("▶|", "SONRAKİ", Modifier.weight(1f), onNext)
++        }
++    }
++}
++
++@Composable
++private fun SoundKey(
++    glyph: String,
++    label: String,
++    modifier: Modifier = Modifier,
++    onClick: () -> Unit,
++    active: Boolean = false,
++    prominent: Boolean = false
++) {
++    Column(
++        modifier.height(58.dp).clip(RoundedCornerShape(14.dp))
++            .background(if (prominent) Cyan.copy(alpha = 0.13f) else if (active) Danger.copy(alpha = 0.12f) else Surface2)
++            .border(1.dp, if (prominent) Cyan.copy(alpha = 0.35f) else if (active) Danger.copy(alpha = 0.34f) else Border, RoundedCornerShape(14.dp))
++            .clickable(onClick = onClick),
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.Center
++    ) {
++        Text(glyph, fontWeight = FontWeight.Bold, fontSize = if (glyph.length > 2) 12.sp else 20.sp, color = if (active) Danger else if (prominent) Cyan else TextPrimary)
++        Text(label, color = TextSecondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+     }
+ }
+ 
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt
+--- ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt	2026-09-06 13:11:58.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/MirrorSenderService.kt	2026-09-06 14:37:33.000000000 +0000
+@@ -14,6 +14,7 @@
+ import android.os.Parcelable
+ import android.view.WindowManager
+ import androidx.core.app.NotificationCompat
++import com.ozdemir.remote.core.Crypto
+ import com.ozdemir.remote.core.Ports
+ import java.io.DataOutputStream
+ import java.net.InetSocketAddress
+@@ -29,18 +30,19 @@
+ 
+     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+         createChannel()
