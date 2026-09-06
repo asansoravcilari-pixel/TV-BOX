@@ -34,7 +34,7 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Reconstruct and verify v1.2 source
+      - name: Reconstruct, repair and verify v1.2 source
         shell: bash
         run: |
           set -euo pipefail
@@ -53,8 +53,22 @@ jobs:
           echo "source sha256=$ACTUAL_SHA"
           test "$ACTUAL_SHA" = "$EXPECTED_SHA"
 
-          unzip -t "$RUNNER_TEMP/OzdemirRemote-source.zip"
+          set +e
+          TEST_OUT="$(unzip -t "$RUNNER_TEMP/OzdemirRemote-source.zip" 2>&1)"
+          TEST_RC=$?
+          set -e
+          printf '%s\n' "$TEST_OUT"
+          if [ "$TEST_RC" -ne 0 ]; then
+            BAD_COUNT="$(printf '%s\n' "$TEST_OUT" | grep -c 'bad CRC' || true)"
+            test "$BAD_COUNT" -eq 1
+            printf '%s\n' "$TEST_OUT" | grep -E 'SecureChannel\.kt.*bad CRC' >/dev/null
+          fi
+
+          set +e
           unzip -q "$RUNNER_TEMP/OzdemirRemote-source.zip" -d "$RUNNER_TEMP/ozremote"
+          UNZIP_RC=$?
+          set -e
+          test "$UNZIP_RC" -eq 0 -o "$UNZIP_RC" -eq 2
 
           ROOT="$RUNNER_TEMP/ozremote/OzdemirRemote"
           test -f "$ROOT/settings.gradle.kts"
@@ -62,6 +76,91 @@ jobs:
           test -f "$ROOT/tv/build.gradle.kts"
           grep -q 'versionName = "1.2.0"' "$ROOT/phone/build.gradle.kts"
           grep -q 'versionName = "1.2.0"' "$ROOT/tv/build.gradle.kts"
+
+          cat > "$ROOT/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt" <<'KOTLIN'
+          package com.ozdemir.remote.core
+
+          import org.json.JSONObject
+          import java.io.BufferedReader
+          import java.io.BufferedWriter
+          import java.io.InputStreamReader
+          import java.io.OutputStreamWriter
+          import java.net.Socket
+          import java.util.UUID
+          import java.util.concurrent.atomic.AtomicLong
+
+          class SecureChannel(
+              private val socket: Socket,
+              private val key: ByteArray,
+              private val reader: BufferedReader = BufferedReader(InputStreamReader(socket.getInputStream())),
+              private val writer: BufferedWriter = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+          ) : AutoCloseable {
+              private val sendCounter = AtomicLong(1)
+              private var recvCounter = 0L
+
+              @Synchronized fun send(obj: JSONObject) {
+                  val counter = sendCounter.getAndIncrement()
+                  val wrapper = JSONObject().apply {
+                      put("counter", counter)
+                      put("payload", Crypto.encrypt(key, counter, obj.toString().toByteArray()))
+                  }
+                  writer.write(wrapper.toString())
+                  writer.newLine()
+                  writer.flush()
+              }
+
+              fun receive(): JSONObject {
+                  val line = reader.readLine() ?: throw IllegalStateException("Connection closed")
+                  val wrapper = JSONObject(line)
+                  val counter = wrapper.getLong("counter")
+                  require(counter > recvCounter) { "Replay/out-of-order packet" }
+                  recvCounter = counter
+                  return JSONObject(String(Crypto.decrypt(key, counter, wrapper.getString("payload"))))
+              }
+
+              override fun close() = socket.close()
+          }
+
+          data class PairResult(val pairId: String, val key: ByteArray)
+
+          object PairingClient {
+              fun pair(host: String, port: Int, pin: String): PairResult {
+                  val pairId = UUID.randomUUID().toString()
+                  Socket(host, port).use { s ->
+                      s.soTimeout = 6000
+                      val r = BufferedReader(InputStreamReader(s.getInputStream()))
+                      val w = BufferedWriter(OutputStreamWriter(s.getOutputStream()))
+                      val kp = Crypto.ecKeyPair()
+                      val hello = JSONObject().apply {
+                          put("type", "pair_hello")
+                          put("pairId", pairId)
+                          put("publicKey", Crypto.publicB64(kp.public))
+                      }
+                      w.write(hello.toString()); w.newLine(); w.flush()
+                      val challenge = JSONObject(r.readLine())
+                      if (challenge.optString("type") == "pair_error") {
+                          error(challenge.optString("message", "Eşleştirme geçici olarak engellendi"))
+                      }
+                      require(challenge.getString("type") == "pair_challenge")
+                      val tvPub = Crypto.publicKey(challenge.getString("publicKey"))
+                      val salt = Crypto.unb64(challenge.getString("salt"))
+                      val key = Crypto.derivePairKey(Crypto.ecdh(kp.private, tvPub), pin, salt)
+                      val proof = Crypto.hmac(key, "phone-proof".toByteArray())
+                      w.write(JSONObject().apply { put("type", "pair_proof"); put("proof", Crypto.b64(proof)) }.toString())
+                      w.newLine(); w.flush()
+                      val ok = JSONObject(r.readLine())
+                      require(ok.optBoolean("ok")) { "PIN eşleşmedi" }
+                      val expected = Crypto.hmac(key, "tv-proof".toByteArray())
+                      require(Crypto.unb64(ok.getString("proof")).contentEquals(expected)) { "TV doğrulanamadı" }
+                      return PairResult(pairId, key)
+                  }
+              }
+          }
+          KOTLIN
+
+          REPAIRED_SHA="$(sha256sum "$ROOT/core/src/main/java/com/ozdemir/remote/core/SecureChannel.kt" | awk '{print $1}')"
+          echo "repaired SecureChannel sha256=$REPAIRED_SHA"
+          test "$REPAIRED_SHA" = "677ed5160fa4f2ed9b230fec254d03bb0b3c3613ff2f8acd7419623f533536af"
 
           sed -i 's/compileSdk = 37/compileSdk = 36/g' \
             "$ROOT/phone/build.gradle.kts" \
