@@ -1,0 +1,169 @@
+-        val n = NotificationCompat.Builder(this, "mirror").setSmallIcon(android.R.drawable.ic_menu_slideshow)
++        val n = NotificationCompat.Builder(this, "mirror").setSmallIcon(R.drawable.ic_stat_remote)
+             .setContentTitle("Özdemir Remote").setContentText("Telefon ekranı TV'ye yansıtılıyor").setOngoing(true).build()
+         if (android.os.Build.VERSION.SDK_INT >= 29) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION) else startForeground(7, n)
+         if (running) return START_NOT_STICKY
+         val resultCode = intent?.getIntExtra("resultCode", Activity.RESULT_CANCELED) ?: return START_NOT_STICKY
+         @Suppress("DEPRECATION") val data = intent.getParcelableExtra<Intent>("data") ?: return START_NOT_STICKY
+         val host = intent.getStringExtra("host") ?: return START_NOT_STICKY
+-        startCapture(resultCode, data, host)
++        val mirrorToken = intent.getStringExtra("mirrorToken") ?: return START_NOT_STICKY
++        startCapture(resultCode, data, host, mirrorToken)
+         return START_NOT_STICKY
+     }
+ 
+-    private fun startCapture(resultCode: Int, data: Intent, host: String) {
++    private fun startCapture(resultCode: Int, data: Intent, host: String, mirrorToken: String) {
+         running = true
+         val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+         projection = mgr.getMediaProjection(resultCode, data).also { p ->
+@@ -61,10 +63,10 @@
+         codec!!.start()
+         projection!!.createVirtualDisplay("OzdemirMirror", width, height, resources.displayMetrics.densityDpi,
+             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null)
+-        thread(name = "mirror-send") { encodeLoop(host, width, height) }
++        thread(name = "mirror-send") { encodeLoop(host, width, height, mirrorToken) }
+     }
+ 
+-    private fun encodeLoop(host: String, width: Int, height: Int) {
++    private fun encodeLoop(host: String, width: Int, height: Int, mirrorToken: String) {
+         var socket: Socket? = null
+         for (attempt in 0 until 20) {
+             try {
+@@ -77,15 +79,31 @@
+         val s = socket ?: run { stopSelf(); return }
+         try {
+             DataOutputStream(s.getOutputStream()).use { out ->
+-                out.writeUTF("OZMR1"); out.writeInt(width); out.writeInt(height); out.writeInt(30); out.flush()
++                val mirrorKey = Crypto.sha256(mirrorToken.toByteArray(Charsets.UTF_8))
++                val proof = Crypto.hmac(mirrorKey, "mirror-proof".toByteArray(Charsets.UTF_8))
++                out.writeUTF("OZMR2")
++                out.writeInt(proof.size)
++                out.write(proof)
++                out.writeInt(width)
++                out.writeInt(height)
++                out.writeInt(30)
++                out.flush()
+                 val info = MediaCodec.BufferInfo()
++                var frameCounter = 1L
+                 while (running) {
+                     val index = codec?.dequeueOutputBuffer(info, 10_000) ?: -1
+                     if (index >= 0) {
+                         val buf = codec!!.getOutputBuffer(index) ?: continue
+                         val bytes = ByteArray(info.size)
+                         buf.position(info.offset); buf.limit(info.offset + info.size); buf.get(bytes)
+-                        out.writeInt(bytes.size); out.writeInt(info.flags); out.writeLong(info.presentationTimeUs); out.write(bytes); out.flush()
++                        val encrypted = Crypto.encryptRaw(mirrorKey, frameCounter, bytes)
++                        out.writeLong(frameCounter)
++                        out.writeInt(encrypted.size)
++                        out.writeInt(info.flags)
++                        out.writeLong(info.presentationTimeUs)
++                        out.write(encrypted)
++                        out.flush()
++                        frameCounter++
+                         codec!!.releaseOutputBuffer(index, false)
+                     }
+                 }
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/Prefs.kt ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/Prefs.kt
+--- ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/Prefs.kt	2026-09-06 14:17:53.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/Prefs.kt	2026-09-06 14:34:49.000000000 +0000
+@@ -3,21 +3,43 @@
+ import android.content.Context
+ import android.util.Base64
+ import com.ozdemir.remote.core.RemoteDevice
++import com.ozdemir.remote.core.SecureKeyStore
+ 
+ class Prefs(ctx: Context) {
+     private val p = ctx.getSharedPreferences("remote", Context.MODE_PRIVATE)
++    private val alias = "ozdemir_remote_phone_pairing"
++
+     fun saveDevice(d: RemoteDevice, pairId: String, key: ByteArray) = p.edit()
+         .putString("name", d.name).putString("host", d.host).putInt("port", d.port)
+         .putString("deviceId", d.deviceId).putString("pairId", pairId)
+-        .putString("key", Base64.encodeToString(key, Base64.NO_WRAP)).apply()
++        .putString("key.secure", SecureKeyStore.seal(alias, key))
++        .remove("key")
++        .apply()
++
+     fun clear() = p.edit().clear().apply()
++
+     fun load(): Stored? {
+         val host = p.getString("host", null) ?: return null
++        val key = runCatching {
++            p.getString("key.secure", null)?.let { SecureKeyStore.open(alias, it) }
++        }.getOrNull() ?: run {
++            // Backward-compatible migration from older plaintext Base64 preference.
++            val legacy = p.getString("key", null) ?: return null
++            val decoded = runCatching { Base64.decode(legacy, Base64.NO_WRAP) }.getOrNull() ?: return null
++            runCatching { p.edit().putString("key.secure", SecureKeyStore.seal(alias, decoded)).remove("key").apply() }
++            decoded
++        }
+         return Stored(
+-            RemoteDevice(p.getString("name", "Next My Box")!!, host, p.getInt("port", 45892), p.getString("deviceId", "")!!),
++            RemoteDevice(
++                p.getString("name", "Next My Box")!!,
++                host,
++                p.getInt("port", 45892),
++                p.getString("deviceId", "")!!
++            ),
+             p.getString("pairId", "")!!,
+-            Base64.decode(p.getString("key", "")!!, Base64.NO_WRAP)
++            key
+         )
+     }
+ }
++
+ data class Stored(val device: RemoteDevice, val pairId: String, val key: ByteArray)
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/RemoteConnection.kt ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/RemoteConnection.kt
+--- ozr_old/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/RemoteConnection.kt	2026-09-06 13:11:58.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/java/com/ozdemir/remote/phone/RemoteConnection.kt	2026-09-06 14:36:29.000000000 +0000
+@@ -2,6 +2,8 @@
+ 
+ import com.ozdemir.remote.core.Command
+ import com.ozdemir.remote.core.Crypto
++import com.ozdemir.remote.core.Discovery
++import com.ozdemir.remote.core.RemoteDevice
+ import com.ozdemir.remote.core.SecureChannel
+ import org.json.JSONObject
+ import java.io.BufferedReader
+@@ -13,10 +15,21 @@
+ class RemoteConnection(private val stored: Stored) : AutoCloseable {
+     private var socket: Socket? = null
+     private var channel: SecureChannel? = null
++    private var activeDevice: RemoteDevice = stored.device
+ 
+     @Synchronized fun connect() {
+         close()
+-        val s = Socket(stored.device.host, stored.device.port)
++        val s = try {
++            Socket(activeDevice.host, activeDevice.port)
++        } catch (first: Throwable) {
++            val rediscovered = runCatching {
++                Discovery.discover(1200).firstOrNull { it.deviceId == stored.device.deviceId }
++            }.getOrNull()
++            if (rediscovered != null) {
++                activeDevice = rediscovered
++                Socket(activeDevice.host, activeDevice.port)
++            } else throw first
++        }
+         s.soTimeout = 5000
+         val r = BufferedReader(InputStreamReader(s.getInputStream()))
+         val w = BufferedWriter(OutputStreamWriter(s.getOutputStream()))
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_background.xml ozr_compact/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_background.xml
+--- ozr_old/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_background.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_background.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <solid android:color="@color/icon_background"/>
++</shape>
+diff -ruN ozr_old/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_foreground.xml ozr_compact/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_foreground.xml
+--- ozr_old/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_foreground.xml	1970-01-01 00:00:00.000000000 +0000
++++ ozr_compact/OzdemirRemote/phone/src/main/res/drawable/ic_launcher_foreground.xml	2026-09-06 16:16:15.000000000 +0000
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp" android:height="108dp"
++    android:viewportWidth="108" android:viewportHeight="108">
++    <path android:fillColor="#7C3AED" android:pathData="M27,18 L81,18 C88.18,18 94,23.82 94,31 L94,77 C94,84.18 88.18,90 81,90 L27,90 C19.82,90 14,84.18 14,77 L14,31 C14,23.82 19.82,18 27,18 Z"/>
++    <path android:fillColor="#F9FAFB" android:pathData="M45,30 L63,30 C68.52,30 73,34.48 73,40 L73,68 C73,73.52 68.52,78 63,78 L45,78 C39.48,78 35,73.52 35,68 L35,40 C35,34.48 39.48,30 45,30 Z"/>
