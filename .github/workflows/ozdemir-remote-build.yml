@@ -40,16 +40,7 @@ jobs:
           cat \
             OzdemirRemote/v1.2-full/part00.b64 \
             OzdemirRemote/v1.2-full/part01.b64 \
-            OzdemirRemote/v1.2-full/p2a.b64 \
-            OzdemirRemote/v1.2-full/p2b0.b64 \
-            OzdemirRemote/v1.2-full/p2b1.b64 \
-            OzdemirRemote/v1.2-full/p2b2.b64 \
-            OzdemirRemote/v1.2-full/p2b30.b64 \
-            OzdemirRemote/v1.2-full/p2b31.b64 \
-            OzdemirRemote/v1.2-full/p2b32.b64 \
-            OzdemirRemote/v1.2-full/p2b33.b64 \
-            OzdemirRemote/v1.2-full/p2c.b64 \
-            OzdemirRemote/v1.2-full/p2d.b64 \
+            OzdemirRemote/v1.2-full/part02.b64 \
             OzdemirRemote/v1.2-full/part03.b64 \
             OzdemirRemote/v1.2-full/part04.b64 \
             OzdemirRemote/v1.2-full/part05.b64 \
@@ -61,8 +52,6 @@ jobs:
           grep -q 'versionName = "1.2.0"' "$ROOT/phone/build.gradle.kts"
           grep -q 'versionName = "1.2.0"' "$ROOT/tv/build.gradle.kts"
 
-          # GitHub runner currently builds against Android 36. Keep source semantics,
-          # only adapt unavailable build-time versions on CI.
           sed -i 's/compileSdk = 37/compileSdk = 36/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts" "$ROOT/core/build.gradle.kts"
           sed -i 's/compose-bom:2026.08.00/compose-bom:2026.06.00/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
           sed -i 's/activity-compose:1.13.0/activity-compose:1.12.2/g' "$ROOT/phone/build.gradle.kts" "$ROOT/tv/build.gradle.kts"
