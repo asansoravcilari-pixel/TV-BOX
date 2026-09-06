@@ -15,13 +15,16 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -31,306 +34,438 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LiveTvActivity extends Activity {
-    private static final String CATALOG_URL="https://raw.githubusercontent.com/asansoravcilari-pixel/TV-BOX/main/ozdemir-launcher/app/src/main/assets/channels.json";
-    private final List<String> channels=new ArrayList<>();
-    private final List<String> categories=new ArrayList<>();
-    private final List<String> streamUrls=new ArrayList<>();
-    private int channelIndex=0;
-    private TextView channelName,channelNumber,hint,catalogStatus,playbackStatus;
+    private static final int DESIGN_W = 1920;
+    private static final int DESIGN_H = 1080;
+    private static final int BG = 0xFF07111F;
+    private static final int SURFACE = 0xFF111D2E;
+    private static final int SURFACE_2 = 0xFF17253A;
+    private static final int ACCENT = 0xFF2F80FF;
+    private static final int TEXT_2 = 0xFFC7CDD6;
+    private static final String CATALOG_URL = "https://raw.githubusercontent.com/asansoravcilari-pixel/TV-BOX/main/ozdemir-launcher/app/src/main/assets/channels.json";
+
+    private final List<String> channels = new ArrayList<>();
+    private final List<String> categories = new ArrayList<>();
+    private final List<String> streamUrls = new ArrayList<>();
+
+    private int channelIndex = 0;
+    private FrameLayout stage;
+    private FrameLayout playerCard;
     private LinearLayout channelList;
     private ScrollView listWrap;
-    private boolean listOpen=false;
+    private TextView playbackStatus;
+    private TextView catalogStatus;
+    private TextView epgNow;
+    private TextView epgNext;
+    private TextView epgLater;
     private ExoPlayer player;
     private PlayerView playerView;
 
-    @Override protected void onCreate(Bundle b){
+    @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         hideSystemUi();
         loadBundledCatalog();
-        player=new ExoPlayer.Builder(this).build();
-        player.addListener(new Player.Listener(){
-            @Override public void onPlayerError(PlaybackException error){
-                if(playbackStatus!=null)playbackStatus.setText("Yayın açılamadı • MENU ile İçerik Merkezi");
+
+        player = new ExoPlayer.Builder(this).build();
+        player.addListener(new Player.Listener() {
+            @Override public void onPlayerError(PlaybackException error) {
+                if (playbackStatus != null) playbackStatus.setText("Stream Error   •   MENU: İçerik Merkezi");
             }
         });
+
         setContentView(buildUi());
-        showChannel(0,false);
+        showChannel(0, false);
         refreshCatalogAsync();
     }
 
-    @Override protected void onStop(){super.onStop();if(player!=null)player.pause();}
-    @Override protected void onStart(){super.onStart();if(player!=null&&!streamUrls.isEmpty()&&channelIndex<streamUrls.size()&&!streamUrls.get(channelIndex).isEmpty())player.play();}
-    @Override protected void onDestroy(){if(player!=null){player.release();player=null;}super.onDestroy();}
-    @Override public void onWindowFocusChanged(boolean f){super.onWindowFocusChanged(f);if(f)hideSystemUi();}
+    @Override protected void onStart() {
+        super.onStart();
+        if (player != null && channelIndex < streamUrls.size() && !streamUrls.get(channelIndex).isEmpty()) player.play();
+    }
 
-    private void hideSystemUi(){
+    @Override protected void onStop() {
+        if (player != null) player.pause();
+        super.onStop();
+    }
+
+    @Override protected void onDestroy() {
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        super.onDestroy();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemUi();
+    }
+
+    private void hideSystemUi() {
         getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN|
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|
+                View.SYSTEM_UI_FLAG_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
-    private View buildUi(){
-        FrameLayout root=new FrameLayout(this);
-        root.setBackgroundColor(0xFF050407);
-        root.setFocusable(true);
-        root.setFocusableInTouchMode(true);
-        root.requestFocus();
+    private View buildUi() {
+        FrameLayout outer = new FrameLayout(this);
+        outer.setBackgroundColor(Color.BLACK);
+        outer.setClipChildren(false);
+        outer.setClipToPadding(false);
 
-        playerView=new PlayerView(this);
+        stage = new FrameLayout(this);
+        stage.setBackgroundColor(BG);
+        stage.setClipChildren(false);
+        stage.setClipToPadding(false);
+        outer.addView(stage, new FrameLayout.LayoutParams(DESIGN_W, DESIGN_H));
+
+        TextView title = text("Canlı TV", 44, true, Color.WHITE);
+        place(title, 96, 64, 300, 54);
+
+        buildPlayerCard();
+        buildChannelListCard();
+        buildEpgCard();
+        addAmbientEdges();
+
+        outer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
+            float scale = Math.min((r - l) / (float) DESIGN_W, (b - t) / (float) DESIGN_H);
+            stage.setPivotX(0f);
+            stage.setPivotY(0f);
+            stage.setScaleX(scale);
+            stage.setScaleY(scale);
+            stage.setX(((r - l) - DESIGN_W * scale) / 2f);
+            stage.setY(((b - t) - DESIGN_H * scale) / 2f);
+        });
+
+        stage.post(() -> {
+            View row = channelList == null ? null : channelList.getChildAt(Math.min(channelIndex, Math.max(0, channelList.getChildCount() - 1)));
+            if (row != null) row.requestFocus();
+            else if (playerCard != null) playerCard.requestFocus();
+        });
+        return outer;
+    }
+
+    private void buildPlayerCard() {
+        playerCard = new FrameLayout(this);
+        playerCard.setFocusable(true);
+        playerCard.setFocusableInTouchMode(true);
+        playerCard.setBackground(round(SURFACE, 30, 0, 0));
+        place(playerCard, 96, 139, 1260, 650);
+
+        TextView heading = text("Canlı Yayın Önizleme", 30, true, Color.WHITE);
+        placeInside(playerCard, heading, 24, 20, 600, 42);
+
+        FrameLayout playerShell = new FrameLayout(this);
+        playerShell.setBackground(round(SURFACE_2, 26, 1, ACCENT));
+        placeInside(playerCard, playerShell, 24, 76, 1212, 480);
+
+        playerView = new PlayerView(this);
         playerView.setUseController(false);
         playerView.setKeepContentOnPlayerReset(true);
         playerView.setPlayer(player);
-        root.addView(playerView,new FrameLayout.LayoutParams(-1,-1));
+        playerView.setBackgroundColor(0xFF0B1421);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, -1);
+        p.setMargins(2, 2, 2, 2);
+        playerShell.addView(playerView, p);
 
-        LinearLayout info=new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setGravity(Gravity.LEFT|Gravity.BOTTOM);
-        info.setPadding(dp(38),dp(26),dp(38),dp(28));
-        GradientDrawable fade=new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,new int[]{0xE8050407,0xA80A0710,0x00100A18});
-        info.setBackground(fade);
-        root.addView(info,new FrameLayout.LayoutParams(-1,dp(188),Gravity.BOTTOM));
+        playbackStatus = text("Playing   •   Paused   •   Buffering   •   No Signal   •   Stream Error   •   Reconnecting", 18, false, TEXT_2);
+        placeInside(playerCard, playbackStatus, 24, 572, 1160, 30);
 
-        channelNumber=text("001",16,true);
-        channelNumber.setTextColor(0xFFCFA9E8);
-        info.addView(channelNumber);
-        channelName=text("TRT 1",30,true);
-        channelName.setPadding(0,dp(3),0,0);
-        info.addView(channelName);
-        playbackStatus=text("Yayın hazırlanıyor…",11,true);
-        playbackStatus.setTextColor(0xFFDCC4EA);
-        playbackStatus.setPadding(0,dp(4),0,0);
-        info.addView(playbackStatus);
-        hint=text("◀ ▶ Kanal değiştir   •   CH+/CH− Kanal değiştir   •   OK Kanal listesi   •   MENU İçerik Merkezi",13,false);
-        hint.setTextColor(0xFFB9A7C2);
-        hint.setPadding(0,dp(5),0,0);
-        info.addView(hint);
+        catalogStatus = text(channels.size() + " kanal", 15, false, TEXT_2);
+        catalogStatus.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        placeInside(playerCard, catalogStatus, 930, 22, 280, 34);
 
-        LinearLayout top=new LinearLayout(this);
-        top.setOrientation(LinearLayout.VERTICAL);
-        top.setPadding(dp(22),dp(11),dp(22),dp(11));
-        top.setBackground(pill());
-        TextView brand=text("ÖZDEMİR CANLI TV",14,true);
-        top.addView(brand);
-        String provider=ContentProviderBridge.isInstalled(this)?" • İçerik Merkezi hazır":"";
-        catalogStatus=text(channels.size()+" kanal • Yerel katalog"+provider,10,false);
-        catalogStatus.setTextColor(0xFFBDA8C8);
-        top.addView(catalogStatus);
-        FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.LEFT);
-        bp.setMargins(dp(30),dp(24),0,0);
-        root.addView(top,bp);
-
-        listWrap=new ScrollView(this);
-        listWrap.setFillViewport(true);
-        listWrap.setVisibility(View.GONE);
-        listWrap.setBackgroundColor(0xF20D0912);
-        channelList=new LinearLayout(this);
-        channelList.setOrientation(LinearLayout.VERTICAL);
-        channelList.setPadding(dp(18),dp(18),dp(18),dp(18));
-        listWrap.addView(channelList,new ScrollView.LayoutParams(-1,-2));
-        rebuildList();
-        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(430),-1,Gravity.RIGHT);
-        root.addView(listWrap,lp);
-        return root;
+        playerCard.setOnFocusChangeListener((v, focused) -> v.setBackground(round(SURFACE, 30, focused ? 2 : 0, focused ? ACCENT : 0)));
     }
 
-    private void rebuildList(){
-        if(channelList==null)return;
+    private void buildChannelListCard() {
+        FrameLayout card = new FrameLayout(this);
+        card.setBackground(round(SURFACE, 30, 0, 0));
+        place(card, 1380, 139, 444, 650);
+
+        TextView heading = text("Kanal Listesi", 28, true, Color.WHITE);
+        placeInside(card, heading, 20, 18, 300, 40);
+
+        listWrap = new ScrollView(this);
+        listWrap.setFillViewport(false);
+        listWrap.setVerticalScrollBarEnabled(false);
+        listWrap.setBackgroundColor(Color.TRANSPARENT);
+        FrameLayout.LayoutParams sw = new FrameLayout.LayoutParams(404, 570);
+        sw.leftMargin = 20;
+        sw.topMargin = 64;
+        card.addView(listWrap, sw);
+
+        channelList = new LinearLayout(this);
+        channelList.setOrientation(LinearLayout.VERTICAL);
+        channelList.setPadding(0, 0, 0, 18);
+        listWrap.addView(channelList, new ScrollView.LayoutParams(-1, -2));
+        rebuildList();
+    }
+
+    private void buildEpgCard() {
+        FrameLayout epg = new FrameLayout(this);
+        epg.setBackground(round(SURFACE, 28, 0, 0));
+        place(epg, 96, 811, 1728, 220);
+
+        TextView heading = text("EPG / Rehber", 28, true, Color.WHITE);
+        placeInside(epg, heading, 22, 18, 300, 40);
+
+        epgNow = epgBlock(epg, "Şimdi", 22, true);
+        epgNext = epgBlock(epg, "Sıradaki", 556, false);
+        epgLater = epgBlock(epg, "Daha Sonra", 1090, false);
+    }
+
+    private TextView epgBlock(FrameLayout parent, String heading, int x, boolean active) {
+        FrameLayout block = new FrameLayout(this);
+        block.setBackground(round(active ? ACCENT : SURFACE_2, 18, 0, 0));
+        placeInside(parent, block, x, 68, 520, 110);
+
+        TextView h = text(heading, 20, true, Color.WHITE);
+        placeInside(block, h, 16, 12, 220, 30);
+
+        TextView body = text("Program bilgisi", 17, false, active ? 0xFFE8F0FF : TEXT_2);
+        placeInside(block, body, 16, 44, 480, 44);
+        return body;
+    }
+
+    private void addAmbientEdges() {
+        View top = new View(this);
+        top.setBackgroundColor(0x242F80FF);
+        place(top, 0, 0, 1920, 8);
+        View bottom = new View(this);
+        bottom.setBackgroundColor(0x242F80FF);
+        place(bottom, 0, 1072, 1920, 8);
+        View left = new View(this);
+        left.setBackgroundColor(0x242F80FF);
+        place(left, 0, 0, 8, 1080);
+        View right = new View(this);
+        right.setBackgroundColor(0x242F80FF);
+        place(right, 1912, 0, 8, 1080);
+    }
+
+    private void rebuildList() {
+        if (channelList == null) return;
         channelList.removeAllViews();
-        for(int i=0;i<channels.size();i++){
-            final int pos=i;
-            String cat=pos<categories.size()?categories.get(pos):"";
-            boolean live=pos<streamUrls.size()&&!streamUrls.get(pos).isEmpty();
-            TextView row=text(String.format("%03d   %s   · %s%s",i+1,channels.get(i),cat,live?"  • CANLI":""),16,true);
-            row.setPadding(dp(18),dp(14),dp(18),dp(14));
+        for (int i = 0; i < channels.size(); i++) {
+            final int pos = i;
+            String cat = pos < categories.size() ? categories.get(pos) : "";
+            TextView row = text((i + 1) + "   " + channels.get(i) + (cat.isEmpty() ? "" : "   ·   " + cat), 20, i == channelIndex, Color.WHITE);
+            row.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            row.setPadding(14, 0, 14, 0);
             row.setFocusable(true);
             row.setClickable(true);
-            row.setBackground(rowBg(false));
-            row.setOnFocusChangeListener((v,f)->v.setBackground(rowBg(f)));
-            row.setOnClickListener(v->{showChannel(pos,true);closeList();});
-            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(58));
-            rp.setMargins(0,dp(4),0,dp(4));
-            channelList.addView(row,rp);
+            row.setBackground(rowBg(i == channelIndex, false));
+            row.setOnClickListener(v -> showChannel(pos, true));
+            row.setOnFocusChangeListener((v, focused) -> {
+                boolean selected = pos == channelIndex;
+                v.setBackground(rowBg(selected, focused));
+                ((TextView) v).setTypeface(Typeface.DEFAULT, (focused || selected) ? Typeface.BOLD : Typeface.NORMAL);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 54);
+            lp.setMargins(0, 3, 0, 3);
+            channelList.addView(row, lp);
         }
     }
 
-    @Override public boolean dispatchKeyEvent(KeyEvent e){
-        if(e.getAction()!=KeyEvent.ACTION_DOWN)return super.dispatchKeyEvent(e);
-        int k=e.getKeyCode();
+    @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (e.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(e);
+        int k = e.getKeyCode();
 
-        if(k==KeyEvent.KEYCODE_MENU){
+        if (k == KeyEvent.KEYCODE_MENU) {
             ContentProviderBridge.launchOrExplain(this);
             return true;
         }
 
-        if(k==KeyEvent.KEYCODE_DPAD_CENTER||k==KeyEvent.KEYCODE_ENTER){
-            if(listOpen){
-                View f=getCurrentFocus();
-                if(f!=null&&f.getParent()==channelList)f.performClick();
-                else closeList();
-            }else openList();
+        if (k == KeyEvent.KEYCODE_CHANNEL_UP || k == KeyEvent.KEYCODE_MEDIA_NEXT) {
+            changeChannel(1, true);
+            return true;
+        }
+        if (k == KeyEvent.KEYCODE_CHANNEL_DOWN || k == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+            changeChannel(-1, true);
             return true;
         }
 
-        if(!listOpen&&(k==KeyEvent.KEYCODE_DPAD_RIGHT||k==KeyEvent.KEYCODE_CHANNEL_UP||k==KeyEvent.KEYCODE_MEDIA_NEXT)){
-            changeChannel(1);
+        View focus = getCurrentFocus();
+        boolean inList = focus != null && focus.getParent() == channelList;
+
+        if (k == KeyEvent.KEYCODE_DPAD_LEFT && inList) {
+            playerCard.requestFocus();
             return true;
         }
-        if(!listOpen&&(k==KeyEvent.KEYCODE_DPAD_LEFT||k==KeyEvent.KEYCODE_CHANNEL_DOWN||k==KeyEvent.KEYCODE_MEDIA_PREVIOUS)){
-            changeChannel(-1);
+        if (k == KeyEvent.KEYCODE_DPAD_RIGHT && focus == playerCard) {
+            focusCurrentRow();
             return true;
         }
-        if(k==KeyEvent.KEYCODE_BACK&&listOpen){closeList();return true;}
+        if ((k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) && focus == playerCard) {
+            focusCurrentRow();
+            return true;
+        }
+
         return super.dispatchKeyEvent(e);
     }
 
-    private void changeChannel(int d){if(channels.isEmpty())return;showChannel((channelIndex+d+channels.size())%channels.size(),true);}
-
-    private void showChannel(int pos,boolean notify){
-        if(channels.isEmpty())return;
-        channelIndex=Math.max(0,Math.min(pos,channels.size()-1));
-        channelNumber.setText(String.format("%03d",channelIndex+1));
-        channelName.setText(channels.get(channelIndex));
-        playSelected();
-        if(notify)Toast.makeText(this,channels.get(channelIndex),Toast.LENGTH_SHORT).show();
+    private void focusCurrentRow() {
+        if (channelList == null || channelList.getChildCount() == 0) return;
+        int idx = Math.max(0, Math.min(channelIndex, channelList.getChildCount() - 1));
+        View row = channelList.getChildAt(idx);
+        if (row != null) {
+            row.requestFocus();
+            listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, row.getTop() - 70)));
+        }
     }
 
-    private void playSelected(){
-        if(player==null)return;
-        String u=channelIndex<streamUrls.size()?streamUrls.get(channelIndex):"";
-        if(u==null||u.trim().isEmpty()){
+    private void changeChannel(int delta, boolean focusRow) {
+        if (channels.isEmpty()) return;
+        int next = (channelIndex + delta + channels.size()) % channels.size();
+        showChannel(next, true);
+        if (focusRow) focusCurrentRow();
+    }
+
+    private void showChannel(int pos, boolean notify) {
+        if (channels.isEmpty()) return;
+        channelIndex = Math.max(0, Math.min(pos, channels.size() - 1));
+        playSelected();
+        updateEpg();
+        rebuildList();
+        focusCurrentRow();
+        if (notify) Toast.makeText(this, channels.get(channelIndex), Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateEpg() {
+        if (channels.isEmpty()) return;
+        String name = channels.get(channelIndex);
+        if (epgNow != null) epgNow.setText(name + " • Şimdi oynatılıyor");
+        if (epgNext != null) epgNext.setText("Sıradaki program bilgisi");
+        if (epgLater != null) epgLater.setText("Daha sonraki program bilgisi");
+    }
+
+    private void playSelected() {
+        if (player == null) return;
+        String u = channelIndex < streamUrls.size() ? streamUrls.get(channelIndex) : "";
+        if (u == null || u.trim().isEmpty()) {
             player.stop();
             player.clearMediaItems();
-            playbackStatus.setText(ContentProviderBridge.isInstalled(this)
-                    ? "Resmî yayın kaynağı bağlı değil • MENU ile İçerik Merkezi"
-                    : "Resmî yayın kaynağı henüz bağlanmadı");
+            playbackStatus.setText("No Signal   •   Resmî yayın kaynağı bağlı değil");
             return;
         }
-        playbackStatus.setText("Canlı yayın açılıyor…");
-        MediaItem item=MediaItem.fromUri(u);
+        playbackStatus.setText("Buffering   •   " + channels.get(channelIndex));
+        MediaItem item = MediaItem.fromUri(u);
         player.setMediaItem(item);
         player.prepare();
         player.play();
     }
 
-    private void openList(){
-        listOpen=true;
-        listWrap.setVisibility(View.VISIBLE);
-        View row=channelList.getChildAt(channelIndex);
-        if(row!=null){
-            row.requestFocus();
-            listWrap.post(()->listWrap.smoothScrollTo(0,Math.max(0,row.getTop()-dp(90))));
-        }
-    }
-
-    private void closeList(){
-        listOpen=false;
-        listWrap.setVisibility(View.GONE);
-        listWrap.clearFocus();
-        getWindow().getDecorView().requestFocus();
-    }
-
-    private void loadBundledCatalog(){
-        try{
-            InputStream in=getAssets().open("channels.json");
+    private void loadBundledCatalog() {
+        try {
+            InputStream in = getAssets().open("channels.json");
             parseCatalog(readAll(in));
-        }catch(Exception ignored){
+        } catch (Exception ignored) {
             channels.add("TRT 1");
             categories.add("Ulusal");
             streamUrls.add("");
         }
     }
 
-    private synchronized void parseCatalog(String json)throws Exception{
-        JSONObject root=new JSONObject(json);
-        JSONArray a=root.getJSONArray("channels");
-        if(a.length()<1)return;
-        ArrayList<String> n=new ArrayList<>(),c=new ArrayList<>(),s=new ArrayList<>();
-        for(int i=0;i<a.length();i++){
-            JSONObject x=a.getJSONObject(i);
-            String name=x.optString("name","").trim();
-            if(name.length()>0){
+    private synchronized void parseCatalog(String json) throws Exception {
+        JSONObject root = new JSONObject(json);
+        JSONArray a = root.getJSONArray("channels");
+        if (a.length() < 1) return;
+        ArrayList<String> n = new ArrayList<>(), c = new ArrayList<>(), s = new ArrayList<>();
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject x = a.getJSONObject(i);
+            String name = x.optString("name", "").trim();
+            if (!name.isEmpty()) {
                 n.add(name);
-                c.add(x.optString("category","Diğer"));
-                s.add(x.optString("streamUrl","").trim());
+                c.add(x.optString("category", "Diğer"));
+                s.add(x.optString("streamUrl", "").trim());
             }
         }
-        if(n.isEmpty())return;
-        channels.clear();channels.addAll(n);
-        categories.clear();categories.addAll(c);
-        streamUrls.clear();streamUrls.addAll(s);
+        if (n.isEmpty()) return;
+        channels.clear(); channels.addAll(n);
+        categories.clear(); categories.addAll(c);
+        streamUrls.clear(); streamUrls.addAll(s);
     }
 
-    private void refreshCatalogAsync(){
-        new Thread(()->{
-            HttpURLConnection h=null;
-            try{
-                h=(HttpURLConnection)new URL(CATALOG_URL).openConnection();
+    private void refreshCatalogAsync() {
+        new Thread(() -> {
+            HttpURLConnection h = null;
+            try {
+                h = (HttpURLConnection) new URL(CATALOG_URL).openConnection();
                 h.setConnectTimeout(4000);
                 h.setReadTimeout(5000);
                 h.setUseCaches(false);
-                h.setRequestProperty("Accept","application/json");
-                if(h.getResponseCode()==200){
-                    String body=readAll(h.getInputStream());
+                h.setRequestProperty("Accept", "application/json");
+                if (h.getResponseCode() == 200) {
+                    String body = readAll(h.getInputStream());
                     parseCatalog(body);
-                    runOnUiThread(()->{
-                        if(channelIndex>=channels.size())channelIndex=0;
+                    runOnUiThread(() -> {
+                        if (channelIndex >= channels.size()) channelIndex = 0;
                         rebuildList();
-                        showChannel(channelIndex,false);
-                        int live=0;
-                        for(String s:streamUrls)if(s!=null&&!s.isEmpty())live++;
-                        String provider=ContentProviderBridge.isInstalled(this)?" • İçerik Merkezi hazır":"";
-                        catalogStatus.setText(channels.size()+" kanal • "+live+" yayın bağlı • Güncel"+provider);
+                        showChannel(channelIndex, false);
+                        int live = 0;
+                        for (String s : streamUrls) if (s != null && !s.isEmpty()) live++;
+                        if (catalogStatus != null) catalogStatus.setText(channels.size() + " kanal   •   " + live + " yayın bağlı");
                     });
                 }
-            }catch(Exception e){
-                runOnUiThread(()->{
-                    String provider=ContentProviderBridge.isInstalled(this)?" • İçerik Merkezi hazır":"";
-                    catalogStatus.setText(channels.size()+" kanal • Çevrimdışı katalog"+provider);
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (catalogStatus != null) catalogStatus.setText(channels.size() + " kanal   •   Çevrimdışı katalog");
                 });
-            }finally{
-                if(h!=null)h.disconnect();
+            } finally {
+                if (h != null) h.disconnect();
             }
         }).start();
     }
 
-    private String readAll(InputStream in)throws Exception{
-        BufferedReader r=new BufferedReader(new InputStreamReader(in,"UTF-8"));
-        StringBuilder b=new StringBuilder();
+    private String readAll(InputStream in) throws Exception {
+        BufferedReader r = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        StringBuilder b = new StringBuilder();
         String line;
-        while((line=r.readLine())!=null)b.append(line);
+        while ((line = r.readLine()) != null) b.append(line);
         r.close();
         return b.toString();
     }
 
-    private TextView text(String s,int sp,boolean bold){
-        TextView t=new TextView(this);
+    private TextView text(String s, int sp, boolean bold, int color) {
+        TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(sp);
-        t.setTextColor(Color.WHITE);
+        t.setTextColor(color);
         t.setGravity(Gravity.CENTER_VERTICAL);
-        if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return t;
     }
 
-    private GradientDrawable rowBg(boolean f){
-        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,f?new int[]{0xFF6D2E9A,0xFF42195F}:new int[]{0xFF21142B,0xFF160E1E});
-        d.setCornerRadius(dp(13));
-        d.setStroke(dp(f?2:1),f?0xFFF0D9FF:0x554D3658);
+    private GradientDrawable rowBg(boolean selected, boolean focused) {
+        int fill = focused ? ACCENT : (selected ? 0xFF1D4F9D : SURFACE);
+        int stroke = focused ? ACCENT : (selected ? 0xFF3E8DFF : 0x00000000);
+        return round(fill, 18, focused || selected ? 2 : 0, stroke);
+    }
+
+    private GradientDrawable round(int color, int radius, int strokeWidth, int strokeColor) {
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(radius);
+        if (strokeWidth > 0) d.setStroke(strokeWidth, strokeColor);
         return d;
     }
 
-    private GradientDrawable pill(){
-        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{0xDD38174D,0xDD1B1025});
-        d.setCornerRadius(dp(14));
-        d.setStroke(dp(1),0x777E5B8E);
-        return d;
+    private void place(View v, int x, int y, int w, int h) {
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
+        lp.leftMargin = x;
+        lp.topMargin = y;
+        stage.addView(v, lp);
     }
 
-    private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+    private void placeInside(FrameLayout parent, View v, int x, int y, int w, int h) {
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
+        lp.leftMargin = x;
+        lp.topMargin = y;
+        parent.addView(v, lp);
+    }
 }
