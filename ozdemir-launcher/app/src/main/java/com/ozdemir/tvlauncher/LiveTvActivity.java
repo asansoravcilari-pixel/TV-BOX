@@ -70,7 +70,14 @@ public class LiveTvActivity extends Activity {
         player = new ExoPlayer.Builder(this).build();
         player.addListener(new Player.Listener() {
             @Override public void onPlayerError(PlaybackException error) {
-                if (playbackStatus != null) playbackStatus.setText("Stream Error   •   MENU: İçerik Merkezi");
+                if (playbackStatus != null) playbackStatus.setText("Stream Error   •   MENU / GUIDE: Kanal Listesi");
+            }
+
+            @Override public void onPlaybackStateChanged(int state) {
+                if (playbackStatus == null || channels.isEmpty()) return;
+                if (state == Player.STATE_BUFFERING) playbackStatus.setText("Buffering   •   " + channels.get(channelIndex));
+                else if (state == Player.STATE_READY) playbackStatus.setText("Playing   •   " + channels.get(channelIndex));
+                else if (state == Player.STATE_ENDED) playbackStatus.setText("No Signal   •   Yayın sona erdi");
             }
         });
 
@@ -142,16 +149,13 @@ public class LiveTvActivity extends Activity {
             stage.setY(((b - t) - DESIGN_H * scale) / 2f);
         });
 
-        stage.post(() -> {
-            View row = channelList == null ? null : channelList.getChildAt(Math.min(channelIndex, Math.max(0, channelList.getChildCount() - 1)));
-            if (row != null) row.requestFocus();
-            else if (playerCard != null) playerCard.requestFocus();
-        });
+        stage.post(this::focusCurrentRow);
         return outer;
     }
 
     private void buildPlayerCard() {
         playerCard = new FrameLayout(this);
+        playerCard.setId(View.generateViewId());
         playerCard.setFocusable(true);
         playerCard.setFocusableInTouchMode(true);
         playerCard.setBackground(round(SURFACE, 30, 0, 0));
@@ -180,6 +184,9 @@ public class LiveTvActivity extends Activity {
         catalogStatus.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         placeInside(playerCard, catalogStatus, 930, 22, 280, 34);
 
+        TextView listHint = text("MENU / GUIDE: Kanal Listesi   •   INFO: İçerik Merkezi", 15, false, TEXT_2);
+        placeInside(playerCard, listHint, 24, 610, 860, 26);
+
         playerCard.setOnFocusChangeListener((v, focused) -> v.setBackground(round(SURFACE, 30, focused ? 2 : 0, focused ? ACCENT : 0)));
     }
 
@@ -189,12 +196,17 @@ public class LiveTvActivity extends Activity {
         place(card, 1380, 139, 444, 650);
 
         TextView heading = text("Kanal Listesi", 28, true, Color.WHITE);
-        placeInside(card, heading, 20, 18, 300, 40);
+        placeInside(card, heading, 20, 18, 260, 40);
+
+        TextView hint = text("OK ile seç", 15, false, TEXT_2);
+        hint.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        placeInside(card, hint, 285, 20, 135, 36);
 
         listWrap = new ScrollView(this);
         listWrap.setFillViewport(false);
         listWrap.setVerticalScrollBarEnabled(false);
         listWrap.setBackgroundColor(Color.TRANSPARENT);
+        listWrap.setFocusable(false);
         FrameLayout.LayoutParams sw = new FrameLayout.LayoutParams(404, 570);
         sw.leftMargin = 20;
         sw.topMargin = 64;
@@ -234,18 +246,10 @@ public class LiveTvActivity extends Activity {
     }
 
     private void addAmbientEdges() {
-        View top = new View(this);
-        top.setBackgroundColor(0x242F80FF);
-        place(top, 0, 0, 1920, 8);
-        View bottom = new View(this);
-        bottom.setBackgroundColor(0x242F80FF);
-        place(bottom, 0, 1072, 1920, 8);
-        View left = new View(this);
-        left.setBackgroundColor(0x242F80FF);
-        place(left, 0, 0, 8, 1080);
-        View right = new View(this);
-        right.setBackgroundColor(0x242F80FF);
-        place(right, 1912, 0, 8, 1080);
+        View top = new View(this); top.setBackgroundColor(0x242F80FF); place(top, 0, 0, 1920, 8);
+        View bottom = new View(this); bottom.setBackgroundColor(0x242F80FF); place(bottom, 0, 1072, 1920, 8);
+        View left = new View(this); left.setBackgroundColor(0x242F80FF); place(left, 0, 0, 8, 1080);
+        View right = new View(this); right.setBackgroundColor(0x242F80FF); place(right, 1912, 0, 8, 1080);
     }
 
     private void rebuildList() {
@@ -255,9 +259,11 @@ public class LiveTvActivity extends Activity {
             final int pos = i;
             String cat = pos < categories.size() ? categories.get(pos) : "";
             TextView row = text((i + 1) + "   " + channels.get(i) + (cat.isEmpty() ? "" : "   ·   " + cat), 20, i == channelIndex, Color.WHITE);
+            row.setId(View.generateViewId());
             row.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
             row.setPadding(14, 0, 14, 0);
             row.setFocusable(true);
+            row.setFocusableInTouchMode(true);
             row.setClickable(true);
             row.setBackground(rowBg(i == channelIndex, false));
             row.setOnClickListener(v -> showChannel(pos, true));
@@ -265,6 +271,7 @@ public class LiveTvActivity extends Activity {
                 boolean selected = pos == channelIndex;
                 v.setBackground(rowBg(selected, focused));
                 ((TextView) v).setTypeface(Typeface.DEFAULT, (focused || selected) ? Typeface.BOLD : Typeface.NORMAL);
+                if (focused && listWrap != null) listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, v.getTop() - 120)));
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 54);
             lp.setMargins(0, 3, 0, 3);
@@ -276,7 +283,11 @@ public class LiveTvActivity extends Activity {
         if (e.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(e);
         int k = e.getKeyCode();
 
-        if (k == KeyEvent.KEYCODE_MENU) {
+        if (k == KeyEvent.KEYCODE_MENU || k == KeyEvent.KEYCODE_GUIDE) {
+            focusCurrentRow();
+            return true;
+        }
+        if (k == KeyEvent.KEYCODE_INFO) {
             ContentProviderBridge.launchOrExplain(this);
             return true;
         }
@@ -305,17 +316,24 @@ public class LiveTvActivity extends Activity {
             focusCurrentRow();
             return true;
         }
+        if ((k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) && inList) {
+            focus.performClick();
+            return true;
+        }
 
         return super.dispatchKeyEvent(e);
     }
 
     private void focusCurrentRow() {
-        if (channelList == null || channelList.getChildCount() == 0) return;
+        if (channelList == null || channelList.getChildCount() == 0) {
+            if (playerCard != null) playerCard.requestFocus();
+            return;
+        }
         int idx = Math.max(0, Math.min(channelIndex, channelList.getChildCount() - 1));
         View row = channelList.getChildAt(idx);
         if (row != null) {
             row.requestFocus();
-            listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, row.getTop() - 70)));
+            if (listWrap != null) listWrap.post(() -> listWrap.smoothScrollTo(0, Math.max(0, row.getTop() - 120)));
         }
     }
 
@@ -332,8 +350,8 @@ public class LiveTvActivity extends Activity {
         playSelected();
         updateEpg();
         rebuildList();
-        focusCurrentRow();
         if (notify) Toast.makeText(this, channels.get(channelIndex), Toast.LENGTH_SHORT).show();
+        focusCurrentRow();
     }
 
     private void updateEpg() {
