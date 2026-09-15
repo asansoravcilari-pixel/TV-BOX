@@ -1,0 +1,44 @@
+name: Build TV Shortcuts
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'tv-shortcuts/**'
+      - '.github/workflows/tv-shortcuts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build APK
+        working-directory: tv-shortcuts
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Publish APK
+        run: |
+          mkdir -p dist
+          cp tv-shortcuts/app/build/outputs/apk/debug/app-debug.apk dist/TV-KISAYOLLARI.apk
+          sha256sum dist/TV-KISAYOLLARI.apk > dist/TV-KISAYOLLARI.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist/TV-KISAYOLLARI.apk dist/TV-KISAYOLLARI.sha256
+          git diff --cached --quiet || git commit -m 'Build TV shortcut pack APK'
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TV-KISAYOLLARI
+          path: |
+            dist/TV-KISAYOLLARI.apk
+            dist/TV-KISAYOLLARI.sha256
