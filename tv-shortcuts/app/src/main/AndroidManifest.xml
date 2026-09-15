@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@drawable/ic_tv_shortcut"
+        android:label="TV Kısayolları"
+        android:theme="@android:style/Theme.NoDisplay">
+
+        <activity android:name=".ShortcutActivities$CanliTv" android:exported="true" android:label="CANLI TV" android:icon="@drawable/ic_tv_shortcut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ShortcutActivities$FilmDizi" android:exported="true" android:label="FİLM &amp; DİZİ" android:icon="@drawable/ic_film_shortcut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ShortcutActivities$Spor" android:exported="true" android:label="SPOR" android:icon="@drawable/ic_sport_shortcut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ShortcutActivities$Youtube" android:exported="true" android:label="YOUTUBE" android:icon="@drawable/ic_youtube_shortcut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ShortcutActivities$Medya" android:exported="true" android:label="MEDYA" android:icon="@drawable/ic_media_shortcut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
