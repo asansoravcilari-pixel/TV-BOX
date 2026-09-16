@@ -26,11 +26,13 @@ jobs:
       - name: Build APK
         working-directory: clean-tv-home
         run: gradle --no-daemon assembleDebug
-      - name: Publish APK
+      - name: Prepare TV home and TV Bro
         run: |
           mkdir -p dist
           cp clean-tv-home/app/build/outputs/apk/debug/app-debug.apk dist/TV-ANA-EKRAN.apk
           sha256sum dist/TV-ANA-EKRAN.apk > dist/TV-ANA-EKRAN.sha256
+          curl -L --fail --retry 3 -o dist/TV-BRO-2.1.6.apk https://github.com/truefedex/tv-bro/releases/download/v2.1.6/tvbro-2.1.6-generic-geckoExcluded.apk
+          echo 'd8634edfe8d94b4fb9a52005d68a090a7f1e85b7f39c2cf01a25dc9dd60942b2  dist/TV-BRO-2.1.6.apk' | sha256sum -c -
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add dist/TV-ANA-EKRAN.apk dist/TV-ANA-EKRAN.sha256
@@ -42,4 +44,5 @@ jobs:
           path: |
             dist/TV-ANA-EKRAN.apk
             dist/TV-ANA-EKRAN.sha256
+            dist/TV-BRO-2.1.6.apk
           if-no-files-found: error
