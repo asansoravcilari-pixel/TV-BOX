@@ -47,7 +47,7 @@ public class MainActivity extends Activity {
     private void buildHome() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(34), dp(20), dp(34), dp(24));
+        root.setPadding(dp(30), dp(20), dp(30), dp(24));
         root.setBackground(bg(Color.rgb(7,11,18), Color.rgb(19,27,39), 0));
 
         LinearLayout top = new LinearLayout(this);
@@ -91,16 +91,17 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER);
 
         int screen = getResources().getDisplayMetrics().widthPixels;
-        int gap = dp(10);
-        int available = screen - dp(68) - gap * 5;
-        int cardW = Math.max(dp(150), Math.min(dp(260), available / 6));
-        int cardH = Math.max(dp(148), Math.min(dp(194), Math.round(cardW * 0.70f)));
+        int gap = dp(9);
+        int available = screen - dp(60) - gap * 6;
+        int cardW = Math.max(dp(128), Math.min(dp(220), available / 7));
+        int cardH = Math.max(dp(140), Math.min(dp(188), Math.round(cardW * 0.74f)));
 
         View first = addCard(row, "CANLI TV", "app.opentv", cardW, cardH, 0);
         addCard(row, "FİLM & DİZİ", "com.bp.box", cardW, cardH, gap);
         addCard(row, "SPOR", "com.bp.box", cardW, cardH, gap);
         addCard(row, "YOUTUBE", "com.google.android.youtube.tv", cardW, cardH, gap);
         addCard(row, "YOUTUBE KIDS", "com.google.android.youtube.tvkids", cardW, cardH, gap);
+        addCard(row, "TARAYICI", "mvl.studio.tvlite", cardW, cardH, gap);
         addCard(row, "MEDYA", "org.videolan.vlc", cardW, cardH, gap);
         root.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, cardH + dp(26)));
 
@@ -121,10 +122,10 @@ public class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
-        card.setPadding(dp(9), dp(13), dp(9), dp(10));
+        card.setPadding(dp(8), dp(12), dp(8), dp(9));
         card.setFocusable(true);
         card.setClickable(true);
-        card.setBackground(cardDrawable(false, dp(22)));
+        card.setBackground(cardDrawable(false, dp(21)));
 
         ImageView icon = new ImageView(this);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -133,25 +134,25 @@ public class MainActivity extends Activity {
             Drawable d = getPackageManager().getApplicationIcon(ai);
             icon.setImageDrawable(d);
         } catch (Exception ignored) {}
-        card.addView(icon, new LinearLayout.LayoutParams(dp(76), dp(76)));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(68), dp(68)));
 
         TextView title = new TextView(this);
         title.setText(label);
         title.setTextColor(Color.WHITE);
-        title.setTextSize(19);
+        title.setTextSize(17);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(false);
         title.setMaxLines(2);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        tp.setMargins(0, dp(12), 0, 0);
+        tp.setMargins(0, dp(10), 0, 0);
         card.addView(title, tp);
 
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(w, h);
         cp.setMargins(left, 0, 0, 0);
         row.addView(card, cp);
         card.setOnClickListener(v -> launch(pkg));
-        focusEffect(card, 22);
+        focusEffect(card, 21);
         return card;
     }
 
@@ -166,7 +167,7 @@ public class MainActivity extends Activity {
 
     private void focusEffect(View v, int radiusDp) {
         v.setOnFocusChangeListener((view, has) -> {
-            view.animate().scaleX(has ? 1.055f : 1f).scaleY(has ? 1.055f : 1f).setDuration(110).start();
+            view.animate().scaleX(has ? 1.05f : 1f).scaleY(has ? 1.05f : 1f).setDuration(110).start();
             view.setBackground(cardDrawable(has, dp(radiusDp)));
             view.setElevation(dp(has ? 14 : 2));
         });
