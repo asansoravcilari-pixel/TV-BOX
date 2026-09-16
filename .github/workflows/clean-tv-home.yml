@@ -1,0 +1,45 @@
+name: Build Clean TV Home
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'clean-tv-home/**'
+      - '.github/workflows/clean-tv-home.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build APK
+        working-directory: clean-tv-home
+        run: gradle --no-daemon assembleDebug
+      - name: Publish APK
+        run: |
+          mkdir -p dist
+          cp clean-tv-home/app/build/outputs/apk/debug/app-debug.apk dist/TV-ANA-EKRAN.apk
+          sha256sum dist/TV-ANA-EKRAN.apk > dist/TV-ANA-EKRAN.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist/TV-ANA-EKRAN.apk dist/TV-ANA-EKRAN.sha256
+          git diff --cached --quiet || git commit -m 'Build clean TV home APK'
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TV-ANA-EKRAN
+          path: |
+            dist/TV-ANA-EKRAN.apk
+            dist/TV-ANA-EKRAN.sha256
+          if-no-files-found: error
