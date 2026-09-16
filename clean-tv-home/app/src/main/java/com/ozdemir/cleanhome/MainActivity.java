@@ -1,6 +1,7 @@
 package com.ozdemir.cleanhome;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -8,6 +9,10 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
@@ -27,6 +32,7 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     private final Handler handler = new Handler();
     private TextView clock;
+    private TextView networkStatus;
 
     private int dp(float v) { return Math.round(v * getResources().getDisplayMetrics().density); }
 
@@ -51,7 +57,22 @@ public class MainActivity extends Activity {
         root.setBackground(bg(Color.rgb(7,11,18), Color.rgb(19,27,39), 0));
 
         LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL | Gravity.RIGHT);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+
+        networkStatus = new TextView(this);
+        networkStatus.setTextSize(16);
+        networkStatus.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        networkStatus.setGravity(Gravity.CENTER);
+        networkStatus.setFocusable(true);
+        networkStatus.setClickable(true);
+        networkStatus.setPadding(dp(14), dp(8), dp(14), dp(8));
+        networkStatus.setBackground(cardDrawable(false, dp(15)));
+        networkStatus.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS)));
+        focusEffect(networkStatus, 15);
+        top.addView(networkStatus, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(50)));
+
+        View spacer = new View(this);
+        top.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
         clock = new TextView(this);
         clock.setTextColor(Color.WHITE);
@@ -101,20 +122,20 @@ public class MainActivity extends Activity {
         addCard(row, "SPOR", "com.bp.box", cardW, cardH, gap);
         addCard(row, "YOUTUBE", "com.google.android.youtube.tv", cardW, cardH, gap);
         addCard(row, "YOUTUBE KIDS", "com.google.android.youtube.tvkids", cardW, cardH, gap);
-        addCard(row, "TARAYICI", "mvl.studio.tvlite", cardW, cardH, gap);
+        addCard(row, "TARAYICI", "com.phlox.tvwebbrowser", cardW, cardH, gap);
         addCard(row, "MEDYA", "org.videolan.vlc", cardW, cardH, gap);
         root.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, cardH + dp(26)));
 
         TextView sub = new TextView(this);
-        sub.setText("Kumandayla seç  •  OK ile aç");
+        sub.setText("Kumandayla seç  •  OK ile aç   •   Wi-Fi kutusuna OK = ağ ayarları");
         sub.setTextColor(Color.rgb(148,162,181));
-        sub.setTextSize(16);
+        sub.setTextSize(15);
         sub.setPadding(dp(2), dp(10), 0, 0);
         root.addView(sub, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(new View(this), new LinearLayout.LayoutParams(1, 0, 0.72f));
 
         setContentView(root);
-        updateClock();
+        updateStatus();
         if (first != null) first.requestFocus();
     }
 
@@ -186,13 +207,38 @@ public class MainActivity extends Activity {
         }
     }
 
-    private final Runnable tick = new Runnable() {
-        @Override public void run() { updateClock(); handler.postDelayed(this, 30000); }
-    };
-
-    private void updateClock() {
-        if (clock != null) clock.setText(new SimpleDateFormat("HH:mm", new Locale("tr", "TR")).format(new Date()));
+    private String wifiIp() {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            WifiInfo wi = wm.getConnectionInfo();
+            int ip = wi == null ? 0 : wi.getIpAddress();
+            if (ip == 0) return "";
+            return (ip & 0xff) + "." + ((ip >> 8) & 0xff) + "." + ((ip >> 16) & 0xff) + "." + ((ip >> 24) & 0xff);
+        } catch (Exception e) { return ""; }
     }
+
+    private void updateStatus() {
+        if (clock != null) clock.setText(new SimpleDateFormat("HH:mm", new Locale("tr", "TR")).format(new Date()));
+        if (networkStatus == null) return;
+        boolean wifi = false;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            NetworkInfo n = cm.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
+            wifi = n != null && n.isConnected();
+        } catch (Exception ignored) {}
+        if (wifi) {
+            String ip = wifiIp();
+            networkStatus.setText(ip.length() > 0 ? "  Wi-Fi: BAĞLI  •  " + ip + "  " : "  Wi-Fi: BAĞLI  ");
+            networkStatus.setTextColor(Color.rgb(124,236,167));
+        } else {
+            networkStatus.setText("  Wi-Fi: BAĞLI DEĞİL  •  OK: BAĞLAN  ");
+            networkStatus.setTextColor(Color.rgb(255,170,120));
+        }
+    }
+
+    private final Runnable tick = new Runnable() {
+        @Override public void run() { updateStatus(); handler.postDelayed(this, 5000); }
+    };
 
     @Override protected void onResume() {
         super.onResume();
